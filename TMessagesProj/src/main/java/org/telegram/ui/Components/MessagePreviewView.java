@@ -373,6 +373,9 @@ public class MessagePreviewView extends FrameLayout {
                             messagePreviewParams.quoteEnd = textSelectionHelper.selectionEnd;
                             messagePreviewParams.quote = ChatActivity.ReplyQuote.from(msg, messagePreviewParams.quoteStart, messagePreviewParams.quoteEnd);
                             menu.getSwipeBack().openForeground(menuBack);
+                        } else {
+                            messagePreviewParams.quoteStart = textSelectionHelper.selectionStart;
+                            messagePreviewParams.quoteEnd = textSelectionHelper.selectionEnd;
                         }
                     }
                 }
@@ -943,6 +946,7 @@ public class MessagePreviewView extends FrameLayout {
                                     final View cell = getReplyMessageCell();
                                     if (cell instanceof ChatMessageCell) {
                                         textSelectionHelper.select((ChatMessageCell) cell, messagePreviewParams.quoteStart, messagePreviewParams.quoteEnd);
+                                        ((ChatMessageCell) cell).invalidateAccessibilityText();
                                     }
                                 }
                                 if (!showOutdatedQuote) {
@@ -1214,6 +1218,7 @@ public class MessagePreviewView extends FrameLayout {
             textSelectionOverlay = textSelectionHelper.getOverlayView(context);
             textSelectionOverlay.setElevation(dp(8));
             textSelectionOverlay.setOutlineProvider(null);
+            textSelectionOverlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             if (textSelectionOverlay != null) {
                 if (textSelectionOverlay.getParent() instanceof ViewGroup) {
                     ((ViewGroup) textSelectionOverlay.getParent()).removeView(textSelectionOverlay);
@@ -1562,7 +1567,12 @@ public class MessagePreviewView extends FrameLayout {
             }
         }
 
-        private class Adapter extends RecyclerView.Adapter {
+        private class Adapter extends RecyclerListView.SelectionAdapter {
+
+            @Override
+            public boolean isEnabled(RecyclerView.ViewHolder holder) {
+                return true;
+            }
 
             @NonNull
             @Override
@@ -1594,7 +1604,17 @@ public class MessagePreviewView extends FrameLayout {
                 };
                 cell.setClipChildren(false);
                 cell.setClipToPadding(false);
+                cell.setFocusable(true);
+                cell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    cell.setScreenReaderFocusable(true);
+                }
                 cell.setDelegate(new ChatMessageCell.ChatMessageCellDelegate() {
+                    @Override
+                    public boolean isQuoteSelectionActive() {
+                        return currentTab == TAB_REPLY;
+                    }
+
                     @Override
                     public TextSelectionHelper.ChatListTextSelectionHelper getTextSelectionHelper() {
                         return textSelectionHelper;
@@ -1699,6 +1719,7 @@ public class MessagePreviewView extends FrameLayout {
 
                         if (!messagePreviewParams.isSecret && messagePreviewParams.quote != null && isReplyMessageCell(messageCell) && !textSelectionHelper.isInSelectionMode()) {
                             textSelectionHelper.select(messageCell, messagePreviewParams.quoteStart, messagePreviewParams.quoteEnd);
+                            messageCell.invalidateAccessibilityText();
                             if (firstAttach) {
                                 scrollToQuoteStartY = offset(messageCell, messagePreviewParams.quoteStart, false);
                                 scrollToQuoteEndY = offset(messageCell, messagePreviewParams.quoteEnd, true);
@@ -2314,6 +2335,7 @@ public class MessagePreviewView extends FrameLayout {
                             final View cell = page.getReplyMessageCell();
                             if (cell instanceof ChatMessageCell) {
                                 page.textSelectionHelper.select((ChatMessageCell) cell, messagePreviewParams.quoteStart, messagePreviewParams.quoteEnd);
+                                ((ChatMessageCell) cell).invalidateAccessibilityText();
                             }
                         }
                     } else {

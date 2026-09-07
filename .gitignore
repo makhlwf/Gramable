@@ -14,3 +14,22 @@ TMessagesProj_AppHockeyApp/afat/
 TMessagesProj_AppStandalone/afat/
 TMessagesProj_AppHuawei/afat/
 TMessagesProj/jni/ffmpeg/build_android
+
+# Superpowers docs
+docs/superpowers/
+
+# Skills and agents
+skills/
+agents/
+
+# Keystores
+*.keystore
+*.keystore.bak
+
+# Google and Huawei services configurations
+*google-services.json
+*agconnect-services.json
+
+# Local properties and credentials
+gradle.properties
+

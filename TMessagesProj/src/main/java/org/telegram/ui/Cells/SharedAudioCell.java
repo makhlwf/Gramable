@@ -609,12 +609,12 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
         info.setEnabled(true);
-        if (currentMessageObject.isMusic()) {
+        if (currentMessageObject != null && currentMessageObject.isMusic()) {
             info.setText(LocaleController.formatString("AccDescrMusicInfo", R.string.AccDescrMusicInfo, currentMessageObject.getMusicAuthor(), currentMessageObject.getMusicTitle()));
         } else if (titleLayout != null && descriptionLayout != null) {
             info.setText(titleLayout.getText() + ", " + descriptionLayout.getText());
         }
-        if (checkBox.isChecked()) {
+        if (checkBox != null && checkBox.isChecked()) {
             info.setCheckable(true);
             info.setChecked(true);
         }

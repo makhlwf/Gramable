@@ -7571,10 +7571,14 @@ public class Theme {
                 for (int a = 0; a < read; a++) {
                     if (bytes[a] == '\n') {
                         int len = a - start + 1;
-                        String line = new String(bytes, start, len - 1);
+                        int lineLen = len - 1;
+                        if (lineLen > 0 && bytes[start + lineLen - 1] == '\r') {
+                            lineLen--;
+                        }
+                        String line = new String(bytes, start, lineLen);
                         if (line.startsWith("WLS=")) {
                             if (wallpaperLink != null && wallpaperLink.length > 0) {
-                                wallpaperLink[0] = line.substring(4);
+                                wallpaperLink[0] = line.substring(4).trim();
                             }
                         } else if (line.startsWith("WPS")) {
                             wallpaperFileOffset = currentPosition + len;
@@ -7582,8 +7586,8 @@ public class Theme {
                             break;
                         } else {
                             if ((idx = line.indexOf('=')) != -1) {
-                                String key = line.substring(0, idx);
-                                String param = line.substring(idx + 1);
+                                String key = line.substring(0, idx).trim();
+                                String param = line.substring(idx + 1).trim();
                                 int value;
                                 if (param.length() > 0 && param.charAt(0) == '#') {
                                     try {

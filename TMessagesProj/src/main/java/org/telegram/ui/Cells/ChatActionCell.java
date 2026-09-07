@@ -34,6 +34,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.Bundle;
 import android.text.Layout;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -124,6 +125,7 @@ import org.telegram.ui.Components.MediaActionDrawable;
 import org.telegram.ui.Components.Premium.StarParticlesView;
 import org.telegram.ui.Components.RLottieDrawable;
 import org.telegram.ui.Components.RadialProgress2;
+import org.telegram.ui.Components.AccessibilityTextGranularityHelper;
 import org.telegram.ui.Components.RadialProgressView;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
 import org.telegram.ui.Components.RecyclerListView;
@@ -566,7 +568,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
             return;
         }
         customText = newText;
-        accessibilityText = null;
+        invalidateAccessibilityText();
         updateTextInternal(inLayout);
     }
 
@@ -620,7 +622,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
         botButtonsByPosition.clear();
         botButtonsLayout = null;
         */
-        accessibilityText = null;
+        invalidateAccessibilityText();
         boolean messageIdChanged = currentMessageObject == null || currentMessageObject.stableId != messageObject.stableId;
         if (currentMessageObject != null) {
             messageObject.playedGiftAnimation = currentMessageObject.playedGiftAnimation;
@@ -3928,6 +3930,14 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
     }
 
     private SpannableStringBuilder accessibilityText;
+    private final AccessibilityTextGranularityHelper accessibilityTextGranularityHelper = new AccessibilityTextGranularityHelper();
+
+    public void invalidateAccessibilityText() {
+        accessibilityText = null;
+        if (accessibilityTextGranularityHelper != null) {
+            accessibilityTextGranularityHelper.reset();
+        }
+    }
 
     @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
@@ -3963,6 +3973,17 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
             info.setText(accessibilityText);
         }
         info.setEnabled(true);
+        if (accessibilityTextGranularityHelper != null) {
+            accessibilityTextGranularityHelper.onInitializeAccessibilityNodeInfo(info, accessibilityText);
+        }
+    }
+
+    @Override
+    public boolean performAccessibilityAction(int action, Bundle arguments) {
+        if (accessibilityTextGranularityHelper != null && accessibilityTextGranularityHelper.performAccessibilityAction(this, accessibilityText, textLayout, action, arguments)) {
+            return true;
+        }
+        return super.performAccessibilityAction(action, arguments);
     }
 
     public void setInvalidateColors(boolean invalidate) {

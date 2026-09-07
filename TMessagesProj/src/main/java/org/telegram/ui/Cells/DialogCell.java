@@ -5573,6 +5573,31 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             sb.append(LocaleController.formatString("AccDescrReceivedDate", R.string.AccDescrReceivedDate, date));
         }
         sb.append(". ");
+        if (isForumCell() || (chat != null && (chat.forum || ChatObject.isMonoForum(chat)) && !isTopic)) {
+            long topicId = message.getTopicId();
+            if (topicId == 0 && message.messageOwner != null) {
+                topicId = MessageObject.getTopicId(currentAccount, message.messageOwner, true);
+            }
+            String topicTitle = null;
+            TLRPC.TL_forumTopic topic = chat != null ? MessagesController.getInstance(currentAccount).getTopicsController().findTopic(chat.id, topicId) : null;
+            if (topic != null) {
+                if (chat != null && ChatObject.isMonoForum(chat) && topic.from_id != null) {
+                    topicTitle = DialogObject.getName(DialogObject.getPeerDialogId(topic.from_id));
+                }
+                if (TextUtils.isEmpty(topicTitle)) {
+                    topicTitle = topic.title;
+                }
+            }
+            if (topicId == 1 && TextUtils.isEmpty(topicTitle)) {
+                topicTitle = LocaleController.getString(R.string.General);
+            }
+            if (!TextUtils.isEmpty(topicTitle)) {
+                sb.append(getString(R.string.AccDescrTopic));
+                sb.append(". ");
+                sb.append(topicTitle);
+                sb.append(". ");
+            }
+        }
         if (chat != null && !message.isOut() && message.isFromUser() && message.messageOwner.action == null) {
             TLRPC.User fromUser = MessagesController.getInstance(currentAccount).getUser(message.messageOwner.from_id.user_id);
             if (fromUser != null) {

@@ -605,6 +605,14 @@ public class SharedDocumentCell extends FrameLayout implements DownloadControlle
         return loading;
     }
 
+    public long getDownloadedSize() {
+        return downloadedSize;
+    }
+
+    public boolean isChecked() {
+        return checkBox != null && checkBox.isChecked();
+    }
+
     public BackupImageView getImageView() {
         return thumbImageView;
     }
@@ -693,7 +701,15 @@ public class SharedDocumentCell extends FrameLayout implements DownloadControlle
     @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
-        if (checkBox.isChecked()) {
+        info.setEnabled(true);
+        if (message != null && message.getDocument() != null) {
+            String fileName = FileLoader.getDocumentFileName(message.getDocument());
+            if (!TextUtils.isEmpty(fileName)) {
+                info.setText(fileName);
+                info.setContentDescription(fileName);
+            }
+        }
+        if (checkBox != null && (checkBox.getVisibility() == VISIBLE || checkBox.isChecked())) {
             info.setCheckable(true);
             info.setChecked(checkBox.isChecked());
         }

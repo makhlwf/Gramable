@@ -168,7 +168,6 @@ public class Utilities {
                 if (allowedChar && start < 0) {
                     start = end;
                 } else if (!allowedChar && start >= 0) {
-                    end++;
                     break;
                 }
             }

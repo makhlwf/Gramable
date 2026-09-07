@@ -1960,9 +1960,13 @@ public class ChannelColorActivity extends BaseFragment implements NotificationCe
                         if (ThemesHorizontalListCell.bytes[a] == '\n') {
                             linesRead++;
                             int len = a - start + 1;
-                            String line = new String(ThemesHorizontalListCell.bytes, start, len - 1, "UTF-8");
+                            int lineLen = len - 1;
+                            if (lineLen > 0 && ThemesHorizontalListCell.bytes[start + lineLen - 1] == '\r') {
+                                lineLen--;
+                            }
+                            String line = new String(ThemesHorizontalListCell.bytes, start, lineLen, "UTF-8");
                             if (line.startsWith("WLS=")) {
-                                String wallpaperLink = line.substring(4);
+                                String wallpaperLink = line.substring(4).trim();
                                 Uri uri = Uri.parse(wallpaperLink);
                                 themeInfo.slug = uri.getQueryParameter("slug");
                                 themeInfo.pathToWallpaper = new File(ApplicationLoader.getFilesDirFixed(), Utilities.MD5(wallpaperLink) + ".wp").getAbsolutePath();
@@ -2021,9 +2025,9 @@ public class ChannelColorActivity extends BaseFragment implements NotificationCe
                                 break;
                             } else {
                                 if ((idx = line.indexOf('=')) != -1) {
-                                    int key = ThemeColors.stringKeyToInt(line.substring(0, idx));
+                                    int key = ThemeColors.stringKeyToInt(line.substring(0, idx).trim());
                                     if (key == Theme.key_chat_inBubble || key == Theme.key_chat_outBubble || key == Theme.key_chat_wallpaper || key == Theme.key_chat_wallpaper_gradient_to1 || key == Theme.key_chat_wallpaper_gradient_to2 || key == Theme.key_chat_wallpaper_gradient_to3) {
-                                        String param = line.substring(idx + 1);
+                                        String param = line.substring(idx + 1).trim();
                                         int value;
                                         if (param.length() > 0 && param.charAt(0) == '#') {
                                             try {

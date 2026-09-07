@@ -157,6 +157,7 @@ import org.telegram.ui.ActionBar.MessageDrawable;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.AvatarSpan;
 import org.telegram.ui.ChatActivity;
+import org.telegram.ui.Components.AccessibilityTextGranularityHelper;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AnimatedEmojiSpan;
 import org.telegram.ui.Components.AnimatedFileDrawable;
@@ -785,6 +786,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             return false;
         }
 
+        default boolean isQuoteSelectionActive() {
+            return false;
+        }
+
         default void videoTimerReached() {
         }
 
@@ -1258,6 +1263,30 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     CharSequence accessibilityText;
     private boolean accessibilityTextUnread, accessibilityTextContentUnread;
     private long accessibilityTextFileSize;
+    private StaticLayout accessibilityLayout;
+    private final AccessibilityTextGranularityHelper accessibilityTextGranularityHelper = new AccessibilityTextGranularityHelper();
+    private boolean quoteSelectionActive;
+
+    public void setQuoteSelectionActive(boolean active) {
+        if (this.quoteSelectionActive != active) {
+            this.quoteSelectionActive = active;
+            invalidateAccessibilityText();
+        }
+    }
+
+    public boolean isQuoteSelectionActive() {
+        return quoteSelectionActive || (delegate != null && delegate.isQuoteSelectionActive());
+    }
+
+    public CharSequence getQuoteableText() {
+        if (currentMessageObject == null) {
+            return null;
+        }
+        if (hasCaptionLayout() && !TextUtils.isEmpty(currentMessageObject.caption)) {
+            return currentMessageObject.caption;
+        }
+        return currentMessageObject.messageText;
+    }
     private boolean wasTranscriptionOpen;
     private Path instantLinkArrowPath;
     private Paint instantLinkArrowPaint;
@@ -1944,6 +1973,25 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         locationImageReceiver.setAllowLoadingOnAttachedOnly(true);
         locationImageReceiver.setRoundRadius(dp(26.1f));
         TAG = DownloadController.getInstance(currentAccount).generateObserverTag();
+        accessibilityTextGranularityHelper.setOnSelectionChangedListener((start, end) -> {
+            if (isQuoteSelectionActive() && delegate != null) {
+                TextSelectionHelper.ChatListTextSelectionHelper helper = delegate.getTextSelectionHelper();
+                if (helper != null) {
+                    int s = Math.min(start, end);
+                    int e = Math.max(start, end);
+                    CharSequence quoteText = getQuoteableText();
+                    if (quoteText != null) {
+                        s = Math.max(0, Math.min(s, quoteText.length()));
+                        e = Math.max(0, Math.min(e, quoteText.length()));
+                        int maxLen = MessagesController.getInstance(currentAccount).quoteLengthMax;
+                        if (e - s > maxLen) {
+                            e = s + maxLen;
+                        }
+                        helper.select(ChatMessageCell.this, s, e);
+                    }
+                }
+            }
+        });
 
         contactAvatarDrawable = new AvatarDrawable();
         photoImage = new ImageReceiver(this) {
@@ -6792,7 +6840,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 messageObject.stableId = oldStableId;
             }
         }
-        accessibilityText = null;
+        invalidateAccessibilityText();
         if (drawCommentButton || useTranscribeButton || drawSideButton == 3 && !((hasDiscussion && messageObject.isLinkedToChat(linkedChatId) || isRepliesChat) && (currentPosition == null || currentPosition.siblingHeights == null && (currentPosition.flags & MessageObject.POSITION_FLAG_BOTTOM) != 0 || currentPosition.siblingHeights != null && (currentPosition.flags & MessageObject.POSITION_FLAG_TOP) == 0))) {
             dataChanged = true;
         }
@@ -26627,6 +26675,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 return true;
             }
         }
+        CharSequence textForGranularity = isQuoteSelectionActive() ? getQuoteableText() : getAccessibilityText();
+        if (accessibilityTextGranularityHelper != null && accessibilityTextGranularityHelper.performAccessibilityAction(this, textForGranularity, getAccessibilityLayout(), action, arguments)) {
+            return true;
+        }
         return super.performAccessibilityAction(action, arguments);
     }
 
@@ -26672,6 +26724,32 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
+        CharSequence text;
+        if (isQuoteSelectionActive()) {
+            text = getQuoteableText();
+            CharSequence fullText = getAccessibilityText();
+            if (fullText != null) {
+                info.setContentDescription(fullText.toString());
+            }
+            if (delegate != null && delegate.getTextSelectionHelper() != null) {
+                TextSelectionHelper.ChatListTextSelectionHelper helper = delegate.getTextSelectionHelper();
+                if (helper.isInSelectionMode() && helper.getSelectedCell() == this) {
+                    accessibilityTextGranularityHelper.setSelectionRange(helper.selectionStart, helper.selectionEnd);
+                }
+            }
+        } else {
+            text = getAccessibilityText();
+            if (text != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                info.setContentDescription(text.toString());
+            }
+        }
+        if (text != null) {
+            info.setText(text);
+        }
+        if (accessibilityTextGranularityHelper != null) {
+            accessibilityTextGranularityHelper.onInitializeAccessibilityNodeInfo(info, text);
+        }
+        info.setFocusable(true);
     }
 
     @Override
@@ -27006,6 +27084,392 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         return seekBarWaveform;
     }
 
+    private boolean isAuthorVisible() {
+        if (!isChat || currentMessageObject == null || currentMessageObject.messageOwner == null) {
+            return false;
+        }
+        if (currentUser != null) {
+            return !currentMessageObject.isOut();
+        }
+        if (currentChat != null) {
+            boolean isGroup = isMegagroup
+                || currentMessageObject.isFromGroup()
+                || !currentMessageObject.messageOwner.post;
+            if (isGroup) {
+                return !currentMessageObject.isOut() || (currentMessageObject.isSupergroup() && currentMessageObject.isFromGroup());
+            }
+        }
+        return false;
+    }
+
+    private void openAuthorProfile() {
+        if (delegate == null) {
+            return;
+        }
+        if (currentUser != null) {
+            if (currentUser.id == 0) {
+                delegate.didPressHiddenForward(this);
+            } else {
+                delegate.didPressUserAvatar(this, currentUser, 0, 0, false);
+            }
+        } else if (currentChat != null) {
+            int id;
+            TLRPC.Chat chat = currentChat;
+            if (currentMessageObject != null && currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.fwd_from != null) {
+                if (chat == null && (currentMessageObject.messageOwner.fwd_from.flags & 16) != 0) {
+                    id = currentMessageObject.messageOwner.fwd_from.saved_from_msg_id;
+                } else {
+                    id = currentMessageObject.messageOwner.fwd_from.channel_post;
+                    chat = currentForwardChannel;
+                }
+            } else {
+                id = 0;
+            }
+            delegate.didPressChannelAvatar(this, chat != null ? chat : currentChat, id, 0, 0, false);
+        }
+    }
+
+    private class ProfileSpan extends ClickableSpan {
+        private TLRPC.User user;
+        private TLRPC.Chat chat;
+
+        public ProfileSpan(TLRPC.User user) {
+            this.user = user;
+        }
+
+        public ProfileSpan(TLRPC.Chat chat) {
+            this.chat = chat;
+        }
+
+        @Override
+        public void onClick(@NonNull View view) {
+            if (delegate != null) {
+                if (user != null) {
+                    if (user.id == 0) {
+                        delegate.didPressHiddenForward(ChatMessageCell.this);
+                    } else {
+                        delegate.didPressUserAvatar(ChatMessageCell.this, user, 0, 0, false);
+                    }
+                } else if (chat != null) {
+                    int id;
+                    TLRPC.Chat targetChat = chat;
+                    if (currentMessageObject != null && currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.fwd_from != null) {
+                        if (targetChat == null && (currentMessageObject.messageOwner.fwd_from.flags & 16) != 0) {
+                            id = currentMessageObject.messageOwner.fwd_from.saved_from_msg_id;
+                        } else {
+                            id = currentMessageObject.messageOwner.fwd_from.channel_post;
+                            targetChat = currentForwardChannel;
+                        }
+                    } else {
+                        id = 0;
+                    }
+                    delegate.didPressChannelAvatar(ChatMessageCell.this, targetChat != null ? targetChat : chat, id, 0, 0, false);
+                } else {
+                    openAuthorProfile();
+                }
+            }
+        }
+    }
+
+    public void invalidateAccessibilityText() {
+        accessibilityText = null;
+        accessibilityLayout = null;
+        if (accessibilityTextGranularityHelper != null) {
+            accessibilityTextGranularityHelper.reset();
+        }
+    }
+
+    public CharSequence getAccessibilityText() {
+        if (currentMessageObject == null) {
+            return null;
+        }
+        final boolean unread = currentMessageObject.isOut() && !currentMessageObject.scheduled && currentMessageObject.isUnread();
+        final boolean contentUnread = currentMessageObject.isContentUnread();
+        final long fileSize = currentMessageObject.loadedFileSize;
+        if (accessibilityText == null || accessibilityTextUnread != unread || accessibilityTextContentUnread != contentUnread || accessibilityTextFileSize != fileSize) {
+            SpannableStringBuilder sb = new SpannableStringBuilder();
+            if (isAuthorVisible()) {
+                CharSequence authorName = currentMessageObject.customName != null
+                        ? currentMessageObject.customName
+                        : (currentUser != null ? UserObject.getUserName(currentUser) : getAuthorName());
+                if (!TextUtils.isEmpty(authorName)) {
+                    int start = sb.length();
+                    sb.append(authorName);
+                    if (currentUser != null) {
+                        sb.setSpan(new ProfileSpan(currentUser), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    } else if (currentChat != null) {
+                        sb.setSpan(new ProfileSpan(currentChat), start, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
+                    final CharSequence adminText = getAdminAccessibilityText();
+                    if (!TextUtils.isEmpty(adminText)) {
+                        if (adminLayoutIsTag) {
+                            sb.append(' ').append(formatString(adminLayoutIsAdmin ? R.string.AccDescrWithAdminTag : R.string.AccDescrWithMemberTag, adminText));
+                        } else {
+                            sb.append(", ").append(adminText);
+                        }
+                    }
+                    sb.append('\n');
+                }
+            }
+            if (drawForwardedName) {
+                for (int a = 0; a < 2; a++) {
+                    if (forwardedNameLayout[a] != null && forwardedNameLayout[a].getText() != null) {
+                        sb.append(forwardedNameLayout[a].getText());
+                        sb.append(a == 0 ? " " : "\n");
+                    }
+                }
+            }
+            if (documentAttach != null && documentAttachType == DOCUMENT_ATTACH_TYPE_DOCUMENT) {
+                String fileName = FileLoader.getAttachFileName(documentAttach);
+                if (fileName.indexOf('.') != -1) {
+                    sb.append(formatString(R.string.AccDescrDocumentType, fileName.substring(fileName.lastIndexOf('.') + 1).toUpperCase(Locale.ROOT)));
+                }
+            }
+            if (currentMessageObject.richLayout != null && !currentMessageObject.richLayout.blocks.isEmpty()) {
+                for (RichMessageLayout.RichBlock block : currentMessageObject.richLayout.blocks) {
+                    if (!block.isVisible()) {
+                        continue;
+                    }
+                    final int before = sb.length();
+                    final SpannableStringBuilder blockText = new SpannableStringBuilder();
+                    block.appendAccessibilityText(blockText);
+                    final CharSequence blockLabel = block.getAccessibilityLabel();
+                    final CharSequence listMarker = block.getAccessibilityListMarker();
+                    if (!TextUtils.isEmpty(listMarker)) {
+                        sb.append(listMarker);
+                        if (!TextUtils.isEmpty(blockLabel) || blockText.length() > 0) {
+                            sb.append(' ');
+                        }
+                    }
+                    if (!TextUtils.isEmpty(blockLabel)) {
+                        sb.append(blockLabel);
+                        if (blockText.length() > 0) {
+                            sb.append(", ");
+                        }
+                    }
+                    sb.append(blockText);
+                    if (sb.length() > before && sb.charAt(sb.length() - 1) != '\n') {
+                        sb.append('\n');
+                    }
+                }
+            } else if (!TextUtils.isEmpty(currentMessageObject.messageText)) {
+                CharSequence messageText = currentMessageObject.messageText;
+                if (messageText instanceof Spanned) {
+                    final Spanned spanned = (Spanned) messageText;
+                    CodeHighlighting.Span[] codeSpans = spanned.getSpans(0, spanned.length(), CodeHighlighting.Span.class);
+                    if (codeSpans != null && codeSpans.length > 0) {
+                        SpannableStringBuilder ssb = new SpannableStringBuilder(messageText);
+                        Arrays.sort(codeSpans, (a, b) -> spanned.getSpanStart(b) - spanned.getSpanStart(a));
+                        for (CodeHighlighting.Span span : codeSpans) {
+                            int start = spanned.getSpanStart(span);
+                            if (start < 0) {
+                                continue;
+                            }
+                            final CharSequence label = TextUtils.isEmpty(span.lng)
+                                ? getString(R.string.AccDescrCodeBlock)
+                                : formatString(R.string.AccDescrCodeBlockLanguage, MessageObject.TextLayoutBlock.capitalizeLanguage(span.lng));
+                            ssb.insert(start, label + ". ");
+                        }
+                        messageText = ssb;
+                    }
+                }
+                sb.append(messageText);
+            }
+            if (documentAttach != null && (documentAttachType == DOCUMENT_ATTACH_TYPE_DOCUMENT || documentAttachType == DOCUMENT_ATTACH_TYPE_GIF || documentAttachType == DOCUMENT_ATTACH_TYPE_VIDEO)) {
+                if (buttonState == 1 && loadingProgressLayout != null) {
+                    sb.append("\n");
+                    final boolean sending = currentMessageObject.isSending();
+                    final String key = sending ? "AccDescrUploadProgress" : "AccDescrDownloadProgress";
+                    final int resId = sending ? R.string.AccDescrUploadProgress : R.string.AccDescrDownloadProgress;
+                    sb.append(formatString(key, resId, AndroidUtilities.formatFileSize(currentMessageObject.loadedFileSize), AndroidUtilities.formatFileSize(lastLoadingSizeTotal)));
+                }
+            }
+            if (currentMessageObject.isMusic()) {
+                sb.append("\n");
+                sb.append(formatString("AccDescrMusicInfo", R.string.AccDescrMusicInfo, currentMessageObject.getMusicAuthor(), currentMessageObject.getMusicTitle()));
+                sb.append(", ");
+                sb.append(LocaleController.formatDuration((int) currentMessageObject.getDuration()));
+            } else if (currentMessageObject.isVoice() || isRoundVideo) {
+                sb.append(", ");
+                sb.append(LocaleController.formatDuration((int) currentMessageObject.getDuration()));
+                sb.append(", ");
+                if (currentMessageObject.isContentUnread()) {
+                    sb.append(getString("AccDescrMsgNotPlayed", R.string.AccDescrMsgNotPlayed));
+                } else {
+                    sb.append(getString("AccDescrMsgPlayed", R.string.AccDescrMsgPlayed));
+                }
+            }
+            if (lastPoll != null) {
+                sb.append(", ");
+                sb.append(lastPoll.question.text);
+                sb.append(", ");
+                String title;
+                if (pollClosed) {
+                    title = getString("FinalResults", R.string.FinalResults);
+                } else {
+                    if (lastPoll.quiz) {
+                        if (lastPoll.public_voters) {
+                            title = getString("QuizPoll", R.string.QuizPoll);
+                        } else {
+                            title = getString("AnonymousQuizPoll", R.string.AnonymousQuizPoll);
+                        }
+                    } else if (lastPoll.public_voters) {
+                        title = getString("PublicPoll", R.string.PublicPoll);
+                    } else {
+                        title = getString("AnonymousPoll", R.string.AnonymousPoll);
+                    }
+                }
+                sb.append(title);
+            }
+            if (documentAttach != null) {
+                if (documentAttachType == DOCUMENT_ATTACH_TYPE_VIDEO) {
+                    sb.append(", ");
+                    sb.append(LocaleController.formatDuration((int) currentMessageObject.getDuration()));
+                }
+                if (buttonState == 0 || documentAttachType == DOCUMENT_ATTACH_TYPE_DOCUMENT) {
+                    sb.append(", ");
+                    sb.append(AndroidUtilities.formatFileSize(documentAttach.size));
+                }
+            }
+            if (currentMessageObject.isVoiceTranscriptionOpen()) {
+                sb.append("\n");
+                sb.append(currentMessageObject.getVoiceTranscription());
+            } else {
+                if (MessageObject.getMedia(currentMessageObject.messageOwner) != null && !TextUtils.isEmpty(currentMessageObject.caption)) {
+                    sb.append("\n");
+                    sb.append(currentMessageObject.caption);
+                }
+            }
+            if (currentMessageObject.isOut()) {
+                if (currentMessageObject.isSent()) {
+                    sb.append("\n");
+                    if (currentMessageObject.scheduled) {
+                        sb.append(formatString("AccDescrScheduledDate", R.string.AccDescrScheduledDate, currentTimeString));
+                    } else {
+                        sb.append(formatString("AccDescrSentDate", R.string.AccDescrSentDate, getString("TodayAt", R.string.TodayAt) + " " + currentTimeString));
+                        sb.append(", ");
+                        sb.append(currentMessageObject.isUnread() ? getString("AccDescrMsgUnread", R.string.AccDescrMsgUnread) : getString("AccDescrMsgRead", R.string.AccDescrMsgRead));
+                    }
+                } else if (currentMessageObject.isSending()) {
+                    sb.append("\n");
+                    sb.append(getString("AccDescrMsgSending", R.string.AccDescrMsgSending));
+                    final float sendingProgress = radialProgress.getProgress();
+                    if (sendingProgress > 0f) {
+                        sb.append(Integer.toString(Math.round(sendingProgress * 100))).append("%");
+                    }
+                } else if (currentMessageObject.isSendError()) {
+                    sb.append("\n");
+                    sb.append(getString("AccDescrMsgSendingError", R.string.AccDescrMsgSendingError));
+                }
+            } else {
+                sb.append("\n");
+                sb.append(formatString("AccDescrReceivedDate", R.string.AccDescrReceivedDate, getString("TodayAt", R.string.TodayAt) + " " + currentTimeString));
+            }
+            if (getRepliesCount() > 0 && !hasCommentLayout()) {
+                sb.append("\n");
+                sb.append(formatPluralString("AccDescrNumberOfReplies", getRepliesCount()));
+            }
+            if (currentMessageObject.messageOwner.reactions != null && currentMessageObject.messageOwner.reactions.results != null) {
+                if (currentMessageObject.messageOwner.reactions.results.size() == 1) {
+                    TLRPC.ReactionCount reaction = currentMessageObject.messageOwner.reactions.results.get(0);
+                    String emoticon = reaction.reaction instanceof TLRPC.TL_reactionEmoji ? ((TLRPC.TL_reactionEmoji) reaction.reaction).emoticon : "";
+                    if (reaction.count == 1) {
+                        sb.append("\n");
+                        boolean isMe = false;
+                        String userName = "";
+                        if (currentMessageObject.messageOwner.reactions.recent_reactions != null && currentMessageObject.messageOwner.reactions.recent_reactions.size() == 1) {
+                            TLRPC.MessagePeerReaction recentReaction = currentMessageObject.messageOwner.reactions.recent_reactions.get(0);
+                            if (recentReaction != null) {
+                                TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(MessageObject.getPeerId(recentReaction.peer_id));
+                                isMe = UserObject.isUserSelf(user);
+                                if (user != null) {
+                                    userName = UserObject.getFirstName(user);
+                                }
+                            }
+                        }
+                        if (isMe) {
+                            sb.append(formatString("AccDescrYouReactedWith", R.string.AccDescrYouReactedWith, emoticon));
+                        } else {
+                            sb.append(formatString("AccDescrReactedWith", R.string.AccDescrReactedWith, userName, emoticon));
+                        }
+                    } else if (reaction.count > 1) {
+                        sb.append("\n");
+                        sb.append(formatPluralString("AccDescrNumberOfPeopleReactions", reaction.count, emoticon));
+                    }
+                } else {
+                    sb.append(getString("Reactions", R.string.Reactions)).append((": "));
+                    final int count = currentMessageObject.messageOwner.reactions.results.size();
+                    for (int i = 0; i < count; ++i) {
+                        TLRPC.ReactionCount reactionCount = currentMessageObject.messageOwner.reactions.results.get(i);
+                        String emoticon = reactionCount.reaction instanceof TLRPC.TL_reactionEmoji ? ((TLRPC.TL_reactionEmoji) reactionCount.reaction).emoticon : "";
+                        if (reactionCount != null) {
+                            sb.append(emoticon).append(" ").append(reactionCount.count + "");
+                            if (i + 1 < count) {
+                                sb.append(", ");
+                            }
+                        }
+                    }
+                    sb.append("\n");
+                }
+            }
+            if ((currentMessageObject.messageOwner.flags & TLRPC.MESSAGE_FLAG_HAS_VIEWS) != 0) {
+                sb.append("\n");
+                sb.append(formatPluralString("AccDescrNumberOfViews", currentMessageObject.messageOwner.views));
+            }
+            sb.append("\n");
+
+            CharacterStyle[] links = sb.getSpans(0, sb.length(), ClickableSpan.class);
+
+            for (CharacterStyle link : links) {
+                int start = sb.getSpanStart(link);
+                int end = sb.getSpanEnd(link);
+                sb.removeSpan(link);
+
+                ClickableSpan underlineSpan = new ClickableSpan() {
+                    @Override
+                    public void onClick(View view) {
+                        if (link instanceof ProfileSpan) {
+                            ((ProfileSpan) link).onClick(view);
+                        } else if (delegate != null) {
+                            delegate.didPressUrl(ChatMessageCell.this, link, false);
+                        }
+                    }
+                };
+                sb.setSpan(underlineSpan, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            accessibilityText = sb;
+            accessibilityTextUnread = unread;
+            accessibilityTextContentUnread = contentUnread;
+            accessibilityTextFileSize = fileSize;
+            accessibilityLayout = null;
+        }
+        return accessibilityText;
+    }
+
+    public Layout getAccessibilityLayout() {
+        CharSequence text = isQuoteSelectionActive() ? getQuoteableText() : getAccessibilityText();
+        if (text == null || text.length() == 0) {
+            return null;
+        }
+        int width = getMeasuredWidth();
+        if (width <= 0) {
+            width = getParentWidth();
+        }
+        if (width <= 0) {
+            width = AndroidUtilities.displaySize.x;
+        }
+        if (accessibilityLayout == null || accessibilityLayout.getText() != text || accessibilityLayout.getWidth() != width) {
+            try {
+                TextPaint paint = Theme.chat_msgTextPaint != null ? Theme.chat_msgTextPaint : new TextPaint();
+                accessibilityLayout = StaticLayoutEx.createStaticLayout(text, paint, width, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false, null, width, Integer.MAX_VALUE);
+            } catch (Exception e) {
+                FileLog.e(e);
+                accessibilityLayout = null;
+            }
+        }
+        return accessibilityLayout;
+    }
+
     private class MessageAccessibilityNodeProvider extends AccessibilityNodeProvider {
 
         public static final int RICH_MEDIA_START = 6000;
@@ -27028,21 +27492,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         private Path linkPath = new Path();
         private RectF rectF = new RectF();
         private Rect rect = new Rect();
-
-        private class ProfileSpan extends ClickableSpan {
-            private TLRPC.User user;
-
-            public ProfileSpan(TLRPC.User user) {
-                this.user = user;
-            }
-
-            @Override
-            public void onClick(@NonNull View view) {
-                if (delegate != null) {
-                    delegate.didPressUserAvatar(ChatMessageCell.this, user, 0, 0, false);
-                }
-            }
-        }
 
         private RichMessageLayout.RichBlock resolveRichElement(int virtualViewId, int[] outLocal) {
             if (currentMessageObject == null || currentMessageObject.richLayout == null) {
@@ -27076,260 +27525,31 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             if (virtualViewId == HOST_VIEW_ID) {
                 AccessibilityNodeInfo info = AccessibilityNodeInfo.obtain(ChatMessageCell.this);
                 onInitializeAccessibilityNodeInfo(info);
-                final boolean unread = currentMessageObject != null && currentMessageObject.isOut() && !currentMessageObject.scheduled && currentMessageObject.isUnread();
-                final boolean contentUnread = currentMessageObject != null && currentMessageObject.isContentUnread();
-                final long fileSize = currentMessageObject != null ? currentMessageObject.loadedFileSize : 0;
-                if (accessibilityText == null || accessibilityTextUnread != unread || accessibilityTextContentUnread != contentUnread || accessibilityTextFileSize != fileSize) {
-                    SpannableStringBuilder sb = new SpannableStringBuilder();
-                    if (isChat && currentUser != null && !currentMessageObject.isOut()) {
-                        sb.append(UserObject.getUserName(currentUser));
-                        sb.setSpan(new ProfileSpan(currentUser), 0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                        final CharSequence adminText = getAdminAccessibilityText();
-                        if (!TextUtils.isEmpty(adminText)) {
-                            if (adminLayoutIsTag) {
-                                sb.append(' ').append(formatString(adminLayoutIsAdmin ? R.string.AccDescrWithAdminTag : R.string.AccDescrWithMemberTag, adminText));
-                            } else {
-                                sb.append(", ").append(adminText);
-                            }
-                        }
-                        sb.append('\n');
+                info.setFocusable(true);
+                CharSequence text;
+                if (isQuoteSelectionActive()) {
+                    text = getQuoteableText();
+                    CharSequence fullText = getAccessibilityText();
+                    if (fullText != null) {
+                        info.setContentDescription(fullText.toString());
                     }
-                    if (drawForwardedName) {
-                        for (int a = 0; a < 2; a++) {
-                            if (forwardedNameLayout[a] != null && forwardedNameLayout[a].getText() != null) {
-                                sb.append(forwardedNameLayout[a].getText());
-                                sb.append(a == 0 ? " " : "\n");
-                            }
+                    if (delegate != null && delegate.getTextSelectionHelper() != null) {
+                        TextSelectionHelper.ChatListTextSelectionHelper helper = delegate.getTextSelectionHelper();
+                        if (helper.isInSelectionMode() && helper.getSelectedCell() == ChatMessageCell.this) {
+                            accessibilityTextGranularityHelper.setSelectionRange(helper.selectionStart, helper.selectionEnd);
                         }
                     }
-                    if (documentAttach != null && documentAttachType == DOCUMENT_ATTACH_TYPE_DOCUMENT) {
-                        String fileName = FileLoader.getAttachFileName(documentAttach);
-                        if (fileName.indexOf('.') != -1) {
-                            sb.append(formatString(R.string.AccDescrDocumentType, fileName.substring(fileName.lastIndexOf('.') + 1).toUpperCase(Locale.ROOT)));
-                        }
-                    }
-                    if (currentMessageObject.richLayout != null && !currentMessageObject.richLayout.blocks.isEmpty()) {
-                        for (RichMessageLayout.RichBlock block : currentMessageObject.richLayout.blocks) {
-                            if (!block.isVisible()) {
-                                continue;
-                            }
-                            final int before = sb.length();
-                            final SpannableStringBuilder blockText = new SpannableStringBuilder();
-                            block.appendAccessibilityText(blockText);
-                            final CharSequence blockLabel = block.getAccessibilityLabel();
-                            final CharSequence listMarker = block.getAccessibilityListMarker();
-                            if (!TextUtils.isEmpty(listMarker)) {
-                                sb.append(listMarker);
-                                if (!TextUtils.isEmpty(blockLabel) || blockText.length() > 0) {
-                                    sb.append(' ');
-                                }
-                            }
-                            if (!TextUtils.isEmpty(blockLabel)) {
-                                sb.append(blockLabel);
-                                if (blockText.length() > 0) {
-                                    sb.append(", ");
-                                }
-                            }
-                            sb.append(blockText);
-                            if (sb.length() > before && sb.charAt(sb.length() - 1) != '\n') {
-                                sb.append('\n');
-                            }
-                        }
-                    } else if (!TextUtils.isEmpty(currentMessageObject.messageText)) {
-                        CharSequence messageText = currentMessageObject.messageText;
-                        if (messageText instanceof Spanned) {
-                            final Spanned spanned = (Spanned) messageText;
-                            CodeHighlighting.Span[] codeSpans = spanned.getSpans(0, spanned.length(), CodeHighlighting.Span.class);
-                            if (codeSpans != null && codeSpans.length > 0) {
-                                SpannableStringBuilder ssb = new SpannableStringBuilder(messageText);
-                                Arrays.sort(codeSpans, (a, b) -> spanned.getSpanStart(b) - spanned.getSpanStart(a));
-                                for (CodeHighlighting.Span span : codeSpans) {
-                                    int start = spanned.getSpanStart(span);
-                                    if (start < 0) {
-                                        continue;
-                                    }
-                                    final CharSequence label = TextUtils.isEmpty(span.lng)
-                                        ? getString(R.string.AccDescrCodeBlock)
-                                        : formatString(R.string.AccDescrCodeBlockLanguage, MessageObject.TextLayoutBlock.capitalizeLanguage(span.lng));
-                                    ssb.insert(start, label + ". ");
-                                }
-                                messageText = ssb;
-                            }
-                        }
-                        sb.append(messageText);
-                    }
-                    if (documentAttach != null && (documentAttachType == DOCUMENT_ATTACH_TYPE_DOCUMENT || documentAttachType == DOCUMENT_ATTACH_TYPE_GIF || documentAttachType == DOCUMENT_ATTACH_TYPE_VIDEO)) {
-                        if (buttonState == 1 && loadingProgressLayout != null) {
-                            sb.append("\n");
-                            final boolean sending = currentMessageObject.isSending();
-                            final String key = sending ? "AccDescrUploadProgress" : "AccDescrDownloadProgress";
-                            final int resId = sending ? R.string.AccDescrUploadProgress : R.string.AccDescrDownloadProgress;
-                            sb.append(formatString(key, resId, AndroidUtilities.formatFileSize(currentMessageObject.loadedFileSize), AndroidUtilities.formatFileSize(lastLoadingSizeTotal)));
-                        }
-                    }
-                    if (currentMessageObject.isMusic()) {
-                        sb.append("\n");
-                        sb.append(formatString("AccDescrMusicInfo", R.string.AccDescrMusicInfo, currentMessageObject.getMusicAuthor(), currentMessageObject.getMusicTitle()));
-                        sb.append(", ");
-                        sb.append(LocaleController.formatDuration((int) currentMessageObject.getDuration()));
-                    } else if (currentMessageObject.isVoice() || isRoundVideo) {
-                        sb.append(", ");
-                        sb.append(LocaleController.formatDuration((int) currentMessageObject.getDuration()));
-                        sb.append(", ");
-                        if (currentMessageObject.isContentUnread()) {
-                            sb.append(getString("AccDescrMsgNotPlayed", R.string.AccDescrMsgNotPlayed));
-                        } else {
-                            sb.append(getString("AccDescrMsgPlayed", R.string.AccDescrMsgPlayed));
-                        }
-                    }
-                    if (lastPoll != null) {
-                        sb.append(", ");
-                        sb.append(lastPoll.question.text);
-                        sb.append(", ");
-                        String title;
-                        if (pollClosed) {
-                            title = getString("FinalResults", R.string.FinalResults);
-                        } else {
-                            if (lastPoll.quiz) {
-                                if (lastPoll.public_voters) {
-                                    title = getString("QuizPoll", R.string.QuizPoll);
-                                } else {
-                                    title = getString("AnonymousQuizPoll", R.string.AnonymousQuizPoll);
-                                }
-                            } else if (lastPoll.public_voters) {
-                                title = getString("PublicPoll", R.string.PublicPoll);
-                            } else {
-                                title = getString("AnonymousPoll", R.string.AnonymousPoll);
-                            }
-                        }
-                        sb.append(title);
-                    }
-                    if (documentAttach != null) {
-                        if (documentAttachType == DOCUMENT_ATTACH_TYPE_VIDEO) {
-                            sb.append(", ");
-                            sb.append(LocaleController.formatDuration((int) currentMessageObject.getDuration()));
-                        }
-                        if (buttonState == 0 || documentAttachType == DOCUMENT_ATTACH_TYPE_DOCUMENT) {
-                            sb.append(", ");
-                            sb.append(AndroidUtilities.formatFileSize(documentAttach.size));
-                        }
-                    }
-                    if (currentMessageObject.isVoiceTranscriptionOpen()) {
-                        sb.append("\n");
-                        sb.append(currentMessageObject.getVoiceTranscription());
-                    } else {
-                        if (MessageObject.getMedia(currentMessageObject.messageOwner) != null && !TextUtils.isEmpty(currentMessageObject.caption)) {
-                            sb.append("\n");
-                            sb.append(currentMessageObject.caption);
-                        }
-                    }
-                    if (currentMessageObject.isOut()) {
-                        if (currentMessageObject.isSent()) {
-                            sb.append("\n");
-                            if (currentMessageObject.scheduled) {
-                                sb.append(formatString("AccDescrScheduledDate", R.string.AccDescrScheduledDate, currentTimeString));
-                            } else {
-                                sb.append(formatString("AccDescrSentDate", R.string.AccDescrSentDate, getString("TodayAt", R.string.TodayAt) + " " + currentTimeString));
-                                sb.append(", ");
-                                sb.append(currentMessageObject.isUnread() ? getString("AccDescrMsgUnread", R.string.AccDescrMsgUnread) : getString("AccDescrMsgRead", R.string.AccDescrMsgRead));
-                            }
-                        } else if (currentMessageObject.isSending()) {
-                            sb.append("\n");
-                            sb.append(getString("AccDescrMsgSending", R.string.AccDescrMsgSending));
-                            final float sendingProgress = radialProgress.getProgress();
-                            if (sendingProgress > 0f) {
-                                sb.append(Integer.toString(Math.round(sendingProgress * 100))).append("%");
-                            }
-                        } else if (currentMessageObject.isSendError()) {
-                            sb.append("\n");
-                            sb.append(getString("AccDescrMsgSendingError", R.string.AccDescrMsgSendingError));
-                        }
-                    } else {
-                        sb.append("\n");
-                        sb.append(formatString("AccDescrReceivedDate", R.string.AccDescrReceivedDate, getString("TodayAt", R.string.TodayAt) + " " + currentTimeString));
-                    }
-                    if (getRepliesCount() > 0 && !hasCommentLayout()) {
-                        sb.append("\n");
-                        sb.append(formatPluralString("AccDescrNumberOfReplies", getRepliesCount()));
-                    }
-                    if (currentMessageObject.messageOwner.reactions != null && currentMessageObject.messageOwner.reactions.results != null) {
-                        if (currentMessageObject.messageOwner.reactions.results.size() == 1) {
-                            TLRPC.ReactionCount reaction = currentMessageObject.messageOwner.reactions.results.get(0);
-                            String emoticon = reaction.reaction instanceof TLRPC.TL_reactionEmoji ? ((TLRPC.TL_reactionEmoji) reaction.reaction).emoticon : "";
-                            if (reaction.count == 1) {
-                                sb.append("\n");
-                                boolean isMe = false;
-                                String userName = "";
-                                if (currentMessageObject.messageOwner.reactions.recent_reactions != null && currentMessageObject.messageOwner.reactions.recent_reactions.size() == 1) {
-                                    TLRPC.MessagePeerReaction recentReaction = currentMessageObject.messageOwner.reactions.recent_reactions.get(0);
-                                    if (recentReaction != null) {
-                                        TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(MessageObject.getPeerId(recentReaction.peer_id));
-                                        isMe = UserObject.isUserSelf(user);
-                                        if (user != null) {
-                                            userName = UserObject.getFirstName(user);
-                                        }
-                                    }
-                                }
-                                if (isMe) {
-                                    sb.append(formatString("AccDescrYouReactedWith", R.string.AccDescrYouReactedWith, emoticon));
-                                } else {
-                                    sb.append(formatString("AccDescrReactedWith", R.string.AccDescrReactedWith, userName, emoticon));
-                                }
-                            } else if (reaction.count > 1) {
-                                sb.append("\n");
-                                sb.append(formatPluralString("AccDescrNumberOfPeopleReactions", reaction.count, emoticon));
-                            }
-                        } else {
-                            sb.append(getString("Reactions", R.string.Reactions)).append((": "));
-                            final int count = currentMessageObject.messageOwner.reactions.results.size();
-                            for (int i = 0; i < count; ++i) {
-                                TLRPC.ReactionCount reactionCount = currentMessageObject.messageOwner.reactions.results.get(i);
-                                String emoticon = reactionCount.reaction instanceof TLRPC.TL_reactionEmoji ? ((TLRPC.TL_reactionEmoji) reactionCount.reaction).emoticon : "";
-                                if (reactionCount != null) {
-                                    sb.append(emoticon).append(" ").append(reactionCount.count + "");
-                                    if (i + 1 < count) {
-                                        sb.append(", ");
-                                    }
-                                }
-                            }
-                            sb.append("\n");
-                        }
-                    }
-                    if ((currentMessageObject.messageOwner.flags & TLRPC.MESSAGE_FLAG_HAS_VIEWS) != 0) {
-                        sb.append("\n");
-                        sb.append(formatPluralString("AccDescrNumberOfViews", currentMessageObject.messageOwner.views));
-                    }
-                    sb.append("\n");
-
-                    CharacterStyle[] links = sb.getSpans(0, sb.length(), ClickableSpan.class);
-
-                    for (CharacterStyle link : links) {
-                        int start = sb.getSpanStart(link);
-                        int end = sb.getSpanEnd(link);
-                        sb.removeSpan(link);
-
-                        ClickableSpan underlineSpan = new ClickableSpan() {
-                            @Override
-                            public void onClick(View view) {
-                                if (link instanceof ProfileSpan) {
-                                    ((ProfileSpan) link).onClick(view);
-                                } else if (delegate != null) {
-                                    delegate.didPressUrl(ChatMessageCell.this, link, false);
-                                }
-                            }
-                        };
-                        sb.setSpan(underlineSpan, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    }
-                    accessibilityText = sb;
-                    accessibilityTextUnread = unread;
-                    accessibilityTextContentUnread = contentUnread;
-                    accessibilityTextFileSize = fileSize;
-                }
-
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                    info.setContentDescription(accessibilityText.toString());
                 } else {
-                    info.setText(accessibilityText);
+                    text = getAccessibilityText();
+                    if (text != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                        info.setContentDescription(text.toString());
+                    }
+                }
+                if (text != null) {
+                    info.setText(text);
+                    if (accessibilityTextGranularityHelper != null) {
+                        accessibilityTextGranularityHelper.onInitializeAccessibilityNodeInfo(info, text);
+                    }
                 }
 
                 info.setEnabled(true);
@@ -27389,7 +27609,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
                 int i;
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                    if (isChat && currentUser != null && !currentMessageObject.isOut()) {
+                    if (isAuthorVisible()) {
                         info.addChild(ChatMessageCell.this, PROFILE);
                     }
                     if (currentMessageObject.messageText instanceof Spannable) {
@@ -27480,10 +27700,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 info.setParent(ChatMessageCell.this);
                 info.setPackageName(getContext().getPackageName());
                 if (virtualViewId == PROFILE) {
-                    if (currentUser == null) {
+                    if (currentUser == null && currentChat == null) {
                         return null;
                     }
-                    String content = UserObject.getUserName(currentUser);
+                    CharSequence content = currentMessageObject != null && currentMessageObject.customName != null
+                            ? currentMessageObject.customName
+                            : (currentUser != null ? UserObject.getUserName(currentUser) : getAuthorName());
                     info.setText(content);
                     rect.set((int) nameX, (int) nameY, (int) (nameX + nameWidth), (int) (nameY + (nameLayout != null ? nameLayout.getHeight() : 10)));
                     info.setBoundsInParent(rect);
@@ -27851,15 +28073,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         @Override
         public boolean performAction(int virtualViewId, int action, Bundle arguments) {
             if (virtualViewId == HOST_VIEW_ID) {
-                performAccessibilityAction(action, arguments);
+                return performAccessibilityAction(action, arguments);
             } else {
                 if (action == AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) {
                     sendAccessibilityEventForVirtualView(virtualViewId, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED);
                 } else if (action == AccessibilityNodeInfo.ACTION_CLICK) {
                     if (virtualViewId == PROFILE) {
-                        if (delegate != null) {
-                            delegate.didPressUserAvatar(ChatMessageCell.this, currentUser, 0, 0, false);
-                        }
+                        openAuthorProfile();
                     } else if (virtualViewId >= RICH_MEDIA_START) {
                         final int[] localElement = {0};
                         final RichMessageLayout.RichBlock block = resolveRichElement(virtualViewId, localElement);
@@ -28640,7 +28860,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     shouldAnimateTimeX = true;
                     changed = true;
                 }
-                accessibilityText = null;
+                invalidateAccessibilityText();
             } else if (!edited && lastDrawingEdited && timeLayout != null) {
                 animateTimeLayout = lastTimeLayout;
                 animateEditedWidthDiff = timeWidth - lastTimeWidth;
@@ -28818,7 +29038,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 animatePinned = true;
                 changed = true;
                 timeDrawablesIsChanged = true;
-                accessibilityText = null;
+                invalidateAccessibilityText();
             }
 
             if ((lastRepliesLayout != null || repliesLayout != null) && lastRepliesCount != getRepliesCount()) {
@@ -28826,14 +29046,14 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 animateReplies = true;
                 changed = true;
                 timeDrawablesIsChanged = true;
-                accessibilityText = null;
+                invalidateAccessibilityText();
             }
 
             if (lastViewsLayout != null && this.lastViewsCount != getMessageObject().messageOwner.views) {
                 animateViewsLayout = lastViewsLayout;
                 changed = true;
                 timeDrawablesIsChanged = true;
-                accessibilityText = null;
+                invalidateAccessibilityText();
             }
 
             if (commentLayout != null && lastCommentsCount != getRepliesCount()) {

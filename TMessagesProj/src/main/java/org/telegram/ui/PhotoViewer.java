@@ -131,8 +131,10 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.Insets;
+import androidx.core.view.AccessibilityDelegateCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 import androidx.core.widget.NestedScrollView;
 import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.FloatValueHolder;
@@ -1128,6 +1130,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private boolean firstAnimationDelay;
     private long lastBufferedPositionCheck;
     private View playButtonAccessibilityOverlay;
+    private View photoAccessibilityOverlay;
     private StickersAlert masksAlert;
     private int lastImageId = -1;
 
@@ -7864,6 +7867,28 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             containerView.addView(playButtonAccessibilityOverlay, LayoutHelper.createFrame(64, 64, Gravity.CENTER));
         }
 
+        photoAccessibilityOverlay = new View(activityContext) {
+            @Override
+            public boolean onTouchEvent(MotionEvent event) {
+                return false;
+            }
+        };
+        photoAccessibilityOverlay.setFocusable(true);
+        photoAccessibilityOverlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            photoAccessibilityOverlay.setScreenReaderFocusable(true);
+        }
+        photoAccessibilityOverlay.setOnClickListener(v -> {
+            if (sendPhotoType == 0 || sendPhotoType == 4) {
+                if (!isCurrentVideo && checkImageView != null && checkImageView.getVisibility() == View.VISIBLE) {
+                    checkImageView.performClick();
+                    return;
+                }
+            }
+            toggleActionBar(!isActionBarVisible, true);
+        });
+        containerView.addView(photoAccessibilityOverlay, 0, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+
         doneButtonFullWidth.setBackground(Theme.AdaptiveRipple.filledRect(getThemedColor(Theme.key_featuredStickers_addButton), 6));
         doneButtonFullWidth.setTextColor(getThemedColor(Theme.key_featuredStickers_buttonText));
 
@@ -14451,6 +14476,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         } catch (Exception e) {
             FileLog.e(e);
         }
+        updatePhotoAccessibilityOverlay();
     }
 
     private boolean canSendMediaToParentChatActivity() {
@@ -16043,6 +16069,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 Math.max(1, placeProvider == null ? 1 : placeProvider.getSelectedCount())
             );
         }
+        updatePhotoAccessibilityOverlay();
     }
 
     private void resetIndexForDeferredImageLoading() {
@@ -18635,6 +18662,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         } else {
             Instance = null;
         }
+        photoAccessibilityOverlay = null;
         onHideView();
     }
 
@@ -21722,6 +21750,76 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 playButtonAccessibilityOverlay.setVisibility(View.INVISIBLE);
             }
         }
+    }
+
+    private void updatePhotoAccessibilityOverlay() {
+        if (photoAccessibilityOverlay == null) {
+            return;
+        }
+        final StringBuilder sb = new StringBuilder();
+        Object obj = null;
+        if (!imagesArrLocals.isEmpty() && currentIndex >= 0 && currentIndex < imagesArrLocals.size()) {
+            obj = imagesArrLocals.get(currentIndex);
+        } else if (!imagesArr.isEmpty() && currentIndex >= 0 && currentIndex < imagesArr.size()) {
+            obj = imagesArr.get(currentIndex);
+        }
+        if (obj == null && currentMessageObject != null) {
+            obj = currentMessageObject;
+        }
+
+        if (obj instanceof MediaController.PhotoEntry) {
+            MediaController.PhotoEntry entry = (MediaController.PhotoEntry) obj;
+            if (entry.isLivePhoto()) {
+                sb.append(LocaleController.getString("AccDescrLivePhoto", R.string.AccDescrLivePhoto));
+            } else if (entry.isVideo) {
+                sb.append(LocaleController.getString("AttachVideo", R.string.AttachVideo));
+                if (entry.duration > 0) {
+                    sb.append(", ").append(LocaleController.formatDuration(entry.duration));
+                }
+            } else {
+                sb.append(LocaleController.getString("AttachPhoto", R.string.AttachPhoto));
+            }
+            if (entry.dateTaken > 0) {
+                sb.append(". ").append(LocaleController.getInstance().getFormatterStats().format(entry.dateTaken * 1000L));
+            }
+            if (!TextUtils.isEmpty(entry.caption)) {
+                sb.append(". ").append(entry.caption);
+            }
+        } else if (obj instanceof MessageObject) {
+            MessageObject message = (MessageObject) obj;
+            if (message.isLivePhoto()) {
+                sb.append(LocaleController.getString("AccDescrLivePhoto", R.string.AccDescrLivePhoto));
+            } else if (message.isVideo()) {
+                sb.append(LocaleController.getString("AttachVideo", R.string.AttachVideo));
+                if (message.getDuration() > 0) {
+                    sb.append(", ").append(LocaleController.formatDuration((int) message.getDuration()));
+                }
+            } else {
+                sb.append(LocaleController.getString("AttachPhoto", R.string.AttachPhoto));
+            }
+            if (message.messageOwner != null && message.messageOwner.date > 0) {
+                sb.append(". ").append(LocaleController.stringForMessageListDate(message.messageOwner.date));
+            }
+            if (!TextUtils.isEmpty(message.caption)) {
+                sb.append(". ").append(message.caption);
+            }
+        } else {
+            sb.append(LocaleController.getString("AttachPhoto", R.string.AttachPhoto));
+        }
+
+        photoAccessibilityOverlay.setContentDescription(sb.toString());
+        ViewCompat.setAccessibilityDelegate(photoAccessibilityOverlay, new AccessibilityDelegateCompat() {
+            @Override
+            public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfoCompat info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.setClassName(ImageView.class.getName());
+                boolean canSelect = (sendPhotoType == 0 || sendPhotoType == 4) && !isCurrentVideo && checkImageView != null && checkImageView.getVisibility() == View.VISIBLE;
+                info.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                        AccessibilityNodeInfoCompat.ACTION_CLICK,
+                        LocaleController.getString(canSelect ? R.string.Select : (isActionBarVisible ? R.string.AccDescrCloseMenu : R.string.AccDescrOpenMenu2))
+                ));
+            }
+        });
     }
 
     private class ListAdapter extends RecyclerListView.SelectionAdapter {

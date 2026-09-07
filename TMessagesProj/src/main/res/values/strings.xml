@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">Telegram</string>
-    <string name="AppNameBeta">Telegram Beta</string>
+    <string name="AppName">Gramable</string>
+    <string name="AppNameBeta">Gramable Beta</string>
     <string name="LanguageName">English</string>
     <string name="English">English</string>
     <string name="LanguageNameInEnglish">English</string>
@@ -5124,6 +5124,7 @@
     <string name="AccDescrVideoCompressHigh">Higher quality</string>
     <string name="AccDescrPlayerDuration">%1$s of %2$s</string>
     <string name="AccDescrDownloadProgress">Downloaded %1$s of %2$s</string>
+    <string name="AccDescrDownloaded">Downloaded</string>
     <string name="AccDescrUploadProgress">Uploaded %1$s of %2$s</string>
     <string name="AccDescrNumberOfViews_one">Viewed %1$d time</string>
     <string name="AccDescrNumberOfViews_other">Viewed %1$d times</string>

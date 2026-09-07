@@ -450,8 +450,10 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
                     } else if (child instanceof Cell) {
                         Cell cell = (Cell) child;
                         cell.sharedDocumentCell.updateFileExistIcon(true);
-                        messageHashIdTmp.set(cell.sharedDocumentCell.getMessage().getId(), cell.sharedDocumentCell.getMessage().getDialogId());
-                        cell.sharedDocumentCell.setChecked(uiCallback.isSelected(messageHashIdTmp), true);
+                        if (cell.sharedDocumentCell.getMessage() != null && uiCallback != null) {
+                            messageHashIdTmp.set(cell.sharedDocumentCell.getMessage().getId(), cell.sharedDocumentCell.getMessage().getDialogId());
+                            cell.sharedDocumentCell.setChecked(uiCallback.isSelected(messageHashIdTmp), true);
+                        }
                     }
                 }
             }
@@ -667,13 +669,50 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
             super(context);
             sharedDocumentCell = new SharedDocumentCell(context, SharedDocumentCell.VIEW_TYPE_GLOBAL_SEARCH);
             sharedDocumentCell.rightDateTextView.setVisibility(View.GONE);
+            sharedDocumentCell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
             addView(sharedDocumentCell);
         }
 
         @Override
         public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
             super.onInitializeAccessibilityNodeInfo(info);
-            sharedDocumentCell.onInitializeAccessibilityNodeInfo(info);
+            info.setEnabled(true);
+            MessageObject message = sharedDocumentCell.getMessage();
+            if (message != null && message.getDocument() != null) {
+                String fileName = FileLoader.getDocumentFileName(message.getDocument());
+                StringBuilder sb = new StringBuilder();
+                if (!TextUtils.isEmpty(fileName)) {
+                    sb.append(fileName);
+                }
+                long totalSize = message.getDocument().size;
+                String sizeStr = AndroidUtilities.formatFileSize(totalSize);
+                if (sharedDocumentCell.isLoading()) {
+                    sb.append(", ").append(LocaleController.getString(R.string.Downloading));
+                    if (sharedDocumentCell.getDownloadedSize() > 0 && totalSize > 0) {
+                        int progress = (int) (sharedDocumentCell.getDownloadedSize() * 100 / totalSize);
+                        sb.append(" ").append(progress).append("%");
+                    }
+                } else if (sharedDocumentCell.isLoaded()) {
+                    sb.append(", ").append(LocaleController.getString(R.string.AccDescrDownloaded));
+                }
+                if (!TextUtils.isEmpty(sizeStr)) {
+                    sb.append(", ").append(sizeStr);
+                }
+                info.setText(sb.toString());
+                info.setContentDescription(sb.toString());
+            }
+            boolean inActionMode = uiCallback != null && uiCallback.actionModeShowing();
+            if (inActionMode || sharedDocumentCell.isChecked()) {
+                info.setCheckable(true);
+                info.setChecked(sharedDocumentCell.isChecked());
+            }
+            String actionLabel;
+            if (inActionMode) {
+                actionLabel = LocaleController.getString(sharedDocumentCell.isChecked() ? R.string.Deselect : R.string.Select);
+            } else {
+                actionLabel = LocaleController.getString(sharedDocumentCell.isLoaded() ? R.string.Open : (sharedDocumentCell.isLoading() ? R.string.AccActionPause : R.string.AccActionDownload));
+            }
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_CLICK, actionLabel));
         }
     }
 
