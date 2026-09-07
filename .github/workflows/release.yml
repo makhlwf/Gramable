@@ -152,7 +152,7 @@ jobs:
           }
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -160,12 +160,36 @@ jobs:
       - name: Set up Android SDK, NDK, and CMake
         shell: bash
         run: |
+          SDK_DIR="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER=$(which sdkmanager 2>/dev/null || find "$SDK_DIR/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1)
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find /usr -name sdkmanager -type f 2>/dev/null | head -n 1)
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager could not be found under $SDK_DIR or /usr"
+            exit 1
+          fi
+
+          echo "Found sdkmanager at: $SDKMANAGER"
+          SDK_BIN_DIR=$(dirname "$SDKMANAGER")
+          export PATH="$SDK_BIN_DIR:$SDK_DIR/platform-tools:$PATH"
+          echo "$SDK_BIN_DIR" >> $GITHUB_PATH
+          echo "$SDK_DIR/platform-tools" >> $GITHUB_PATH
+
           echo "Accepting Android SDK licenses..."
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          echo "Installing NDK 27.2.12479018, CMake 3.22.1, and platforms..."
-          sdkmanager --install "ndk;27.2.12479018" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1
-          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> $GITHUB_ENV
-          echo "NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> $GITHUB_ENV
+          yes | "$SDKMANAGER" --licenses || true
+
+          echo "Installing NDK 27.2.12479018, CMake 3.22.1, platforms;android-36, and build-tools;36.0.0..."
+          "$SDKMANAGER" --install "ndk;27.2.12479018" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
+
+          echo "ANDROID_HOME=$SDK_DIR" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> $GITHUB_ENV
+          if [ -d "$SDK_DIR/ndk/27.2.12479018" ]; then
+            echo "ANDROID_NDK_HOME=$SDK_DIR/ndk/27.2.12479018" >> $GITHUB_ENV
+            echo "NDK_HOME=$SDK_DIR/ndk/27.2.12479018" >> $GITHUB_ENV
+            echo "NDK 27.2.12479018 successfully installed at $SDK_DIR/ndk/27.2.12479018"
+          fi
 
       - name: Restore Secrets and Configuration
         shell: pwsh
@@ -242,12 +266,13 @@ jobs:
           [System.IO.File]::WriteAllText("gradle.properties", ($propsLines -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
 
           # 5. Generate local.properties with SDK/NDK paths and update URL
-          $sdkPath = $env:ANDROID_HOME -replace '\\', '/'
-          $localLines = @(
-            "sdk.dir=$sdkPath",
-            "ndk.dir=$sdkPath/ndk/27.2.12479018",
-            "BETA_URL=https://raw.githubusercontent.com/${{ github.repository }}/master/update.json"
-          )
+          $sdkPath = if ($env:ANDROID_HOME) { $env:ANDROID_HOME -replace '\\', '/' } else { "/usr/local/lib/android/sdk" }
+          $localLines = [System.Collections.Generic.List[string]]::new()
+          $localLines.Add("sdk.dir=$sdkPath")
+          if (Test-Path "$sdkPath/ndk/27.2.12479018") {
+            $localLines.Add("ndk.dir=$sdkPath/ndk/27.2.12479018")
+          }
+          $localLines.Add("BETA_URL=https://raw.githubusercontent.com/${{ github.repository }}/master/update.json")
           [System.IO.File]::WriteAllText("local.properties", ($localLines -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
           Write-Host "Properties and secrets prepared."
 
@@ -268,8 +293,14 @@ jobs:
           $ver = "${{ steps.get_version.outputs.VERSION }}"
           $rawApk = "TMessagesProj_App/build/outputs/apk/afat/release/app.apk"
           if (-not (Test-Path $rawApk)) {
-            Write-Error "ERROR: Built APK not found at $rawApk"
-            exit 1
+            $found = Get-ChildItem -Path "TMessagesProj_App/build/outputs/apk" -Filter "*.apk" -Recurse | Select-Object -First 1
+            if ($found) {
+              $rawApk = $found.FullName
+              Write-Host "Found APK at alternative location: $rawApk"
+            } else {
+              Write-Error "ERROR: Built APK not found at $rawApk"
+              exit 1
+            }
           }
 
           New-Item -ItemType Directory -Force -Path "release_assets" | Out-Null
@@ -282,6 +313,7 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_MESSAGE: ${{ github.event.inputs.release_message }}
         run: |
           gh release delete beta --cleanup-tag -y 2>$null || Write-Host "No existing beta release to delete."
@@ -301,6 +333,7 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_MESSAGE: ${{ github.event.inputs.release_message }}
           WHATS_NEW: ${{ github.event.inputs.whats_new }}
         run: |
