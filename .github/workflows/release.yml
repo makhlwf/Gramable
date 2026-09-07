@@ -1,0 +1,370 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release Type'
+        required: true
+        type: choice
+        default: 'beta'
+        options:
+          - stable
+          - beta
+      version:
+        description: 'Version Number (Required for Stable, e.g. 12.10.2)'
+        required: false
+        type: string
+      version_code:
+        description: 'Version Code (Optional integer, auto-incremented if empty)'
+        required: false
+        type: string
+      send_notification:
+        description: 'Push Update Notification (Update in-app update.json)'
+        required: false
+        type: boolean
+        default: true
+      release_message:
+        description: 'Release Message (GitHub release body)'
+        required: false
+        type: string
+      whats_new:
+        description: "What's New / Changelog (Required for Stable, shown in update dialog)"
+        required: false
+        type: string
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Validate Inputs
+        shell: pwsh
+        env:
+          RELEASE_TYPE: ${{ github.event.inputs.release_type }}
+          VERSION: ${{ github.event.inputs.version }}
+          RELEASE_MESSAGE: ${{ github.event.inputs.release_message }}
+          WHATS_NEW: ${{ github.event.inputs.whats_new }}
+        run: |
+          $type = $env:RELEASE_TYPE
+          $ver = $env:VERSION
+          $msg = $env:RELEASE_MESSAGE
+          $news = $env:WHATS_NEW
+
+          if ($type -eq 'stable') {
+            if (-not $ver) { Write-Error "ERROR: 'Version' is required for Stable releases."; exit 1 }
+            if (-not $msg) { Write-Error "ERROR: 'Release Message' is required for Stable releases."; exit 1 }
+            if (-not $news) { Write-Error "ERROR: 'Whats New' is required for Stable releases."; exit 1 }
+          } else {
+            Write-Host "Beta release selected. Skipping strict input validation."
+          }
+
+      - name: Determine Version
+        id: get_version
+        shell: pwsh
+        env:
+          RELEASE_TYPE: ${{ github.event.inputs.release_type }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_VERSION_CODE: ${{ github.event.inputs.version_code }}
+        run: |
+          $currentName = "12.10.1"
+          $currentCode = 7038
+          if (Test-Path "gradle.properties") {
+            $props = Get-Content "gradle.properties" -Raw
+            if ($props -match '(?m)^APP_VERSION_NAME\s*=\s*(.+)') {
+              $currentName = $matches[1].Trim()
+            }
+            if ($props -match '(?m)^APP_VERSION_CODE\s*=\s*(\d+)') {
+              $currentCode = [int]$matches[1].Trim()
+            }
+          }
+
+          if (Test-Path "update.json") {
+            try {
+              $upJson = Get-Content "update.json" -Raw | ConvertFrom-Json
+              if ($upJson.version_code) {
+                $upCode = [int][math]::Floor([double]$upJson.version_code / 10)
+                if ($upCode -gt $currentCode) {
+                  $currentCode = $upCode
+                }
+              }
+            } catch {}
+          }
+
+          if ($env:RELEASE_TYPE -eq "stable") {
+            $version = $env:INPUT_VERSION
+            if ($env:INPUT_VERSION_CODE) {
+              $versionCode = [int]$env:INPUT_VERSION_CODE
+            } else {
+              $versionCode = $currentCode + 1
+            }
+          } else {
+            if ($env:INPUT_VERSION) {
+              $version = $env:INPUT_VERSION
+            } else {
+              $version = "$currentName-beta"
+            }
+            if ($env:INPUT_VERSION_CODE) {
+              $versionCode = [int]$env:INPUT_VERSION_CODE
+            } else {
+              $versionCode = $currentCode + 1
+            }
+          }
+
+          # The afat flavor uses (versionCode * 10 + 9) as the final APK versionCodeOverride
+          $apkVersionCode = $versionCode * 10 + 9
+
+          Write-Host "Version Name: $version"
+          Write-Host "Base Version Code: $versionCode"
+          Write-Host "APK Version Code: $apkVersionCode"
+
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "VERSION_CODE=$versionCode" >> $env:GITHUB_OUTPUT
+          echo "APK_VERSION_CODE=$apkVersionCode" >> $env:GITHUB_OUTPUT
+          echo "RELEASE_TAG=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Bump Version Files and Commit (Stable only)
+        if: ${{ github.event.inputs.release_type == 'stable' }}
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.get_version.outputs.VERSION }}"
+          $code = "${{ steps.get_version.outputs.VERSION_CODE }}"
+
+          if (Test-Path "gradle.properties") {
+            $p = [System.IO.File]::ReadAllText("gradle.properties", [System.Text.Encoding]::UTF8)
+            $p = $p -replace '(?m)^APP_VERSION_NAME\s*=.*', "APP_VERSION_NAME=$ver"
+            $p = $p -replace '(?m)^APP_VERSION_CODE\s*=.*', "APP_VERSION_CODE=$code"
+            [System.IO.File]::WriteAllText("gradle.properties", $p, [System.Text.UTF8Encoding]::new($false))
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add gradle.properties
+            git commit -m "bumping version"
+            git push origin HEAD:${{ github.ref }}
+          }
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK, NDK, and CMake
+        shell: bash
+        run: |
+          echo "Accepting Android SDK licenses..."
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          echo "Installing NDK 27.2.12479018, CMake 3.22.1, and platforms..."
+          sdkmanager --install "ndk;27.2.12479018" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> $GITHUB_ENV
+          echo "NDK_HOME=${ANDROID_HOME}/ndk/27.2.12479018" >> $GITHUB_ENV
+
+      - name: Restore Secrets and Configuration
+        shell: pwsh
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          KEY_PASS: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          STORE_PASS: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          GOOGLE_SERVICES: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          AGCONNECT_SERVICES: ${{ secrets.AGCONNECT_SERVICES_JSON }}
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+          VERSION_CODE: ${{ steps.get_version.outputs.VERSION_CODE }}
+        run: |
+          # 1. Restore release keystore
+          New-Item -ItemType Directory -Force -Path "TMessagesProj/config" | Out-Null
+          if ($env:KEYSTORE_BASE64) {
+            $bytes = [System.Convert]::FromBase64String($env:KEYSTORE_BASE64)
+            [System.IO.File]::WriteAllBytes("TMessagesProj/config/release.keystore", $bytes)
+            Write-Host "Restored release.keystore successfully."
+          } else {
+            Write-Warning "RELEASE_KEYSTORE_BASE64 secret is not set!"
+          }
+
+          # 2. Restore Google Services JSON across all modules
+          if ($env:GOOGLE_SERVICES) {
+            $googlePaths = @(
+              "TMessagesProj/google-services.json",
+              "TMessagesProj_App/google-services.json",
+              "TMessagesProj_AppHockeyApp/google-services.json",
+              "TMessagesProj_AppStandalone/google-services.json",
+              "TMessagesProj_AppHuawei/google-services.json"
+            )
+            foreach ($p in $googlePaths) {
+              $dir = Split-Path $p
+              New-Item -ItemType Directory -Force -Path $dir | Out-Null
+              [System.IO.File]::WriteAllText($p, $env:GOOGLE_SERVICES, [System.Text.UTF8Encoding]::new($false))
+            }
+            Write-Host "Restored google-services.json across all modules."
+          }
+
+          # 3. Restore Huawei AGConnect Services JSON
+          if ($env:AGCONNECT_SERVICES) {
+            New-Item -ItemType Directory -Force -Path "TMessagesProj_AppHuawei" | Out-Null
+            [System.IO.File]::WriteAllText("TMessagesProj_AppHuawei/agconnect-services.json", $env:AGCONNECT_SERVICES, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Restored agconnect-services.json."
+          }
+
+          # 4. Generate gradle.properties with secrets
+          $ver = $env:VERSION
+          $code = $env:VERSION_CODE
+          $keyPass = if ($env:KEY_PASS) { $env:KEY_PASS } else { "gramablekey" }
+          $storePass = if ($env:STORE_PASS) { $env:STORE_PASS } else { "gramablekey" }
+          $alias = if ($env:KEY_ALIAS) { $env:KEY_ALIAS } else { "gramable" }
+
+          $propsLines = @(
+            "APP_VERSION_CODE=$code",
+            "APP_VERSION_NAME=$ver",
+            "APP_PACKAGE=com.makhlwf.gramable",
+            "IS_PRIVATE=false",
+            "RELEASE_KEY_PASSWORD=$keyPass",
+            "RELEASE_KEY_ALIAS=$alias",
+            "RELEASE_STORE_PASSWORD=$storePass",
+            "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g",
+            "org.gradle.daemon=false",
+            "org.gradle.parallel=true",
+            "org.gradle.configureondemand=false",
+            "android.useAndroidX=true",
+            "android.enableJetifier=true",
+            "android.defaults.buildfeatures.buildconfig=true",
+            "android.nonTransitiveRClass=false",
+            "android.nonFinalResIds=false",
+            "android.enableR8.fullMode=true"
+          )
+          [System.IO.File]::WriteAllText("gradle.properties", ($propsLines -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
+
+          # 5. Generate local.properties with SDK/NDK paths and update URL
+          $sdkPath = $env:ANDROID_HOME -replace '\\', '/'
+          $localLines = @(
+            "sdk.dir=$sdkPath",
+            "ndk.dir=$sdkPath/ndk/27.2.12479018",
+            "BETA_URL=https://raw.githubusercontent.com/${{ github.repository }}/master/update.json"
+          )
+          [System.IO.File]::WriteAllText("local.properties", ($localLines -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
+          Write-Host "Properties and secrets prepared."
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Build Application (APK)
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew :TMessagesProj_App:assembleAfatRelease --stacktrace
+
+      - name: Prepare Artifacts
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.get_version.outputs.VERSION }}"
+          $rawApk = "TMessagesProj_App/build/outputs/apk/afat/release/app.apk"
+          if (-not (Test-Path $rawApk)) {
+            Write-Error "ERROR: Built APK not found at $rawApk"
+            exit 1
+          }
+
+          New-Item -ItemType Directory -Force -Path "release_assets" | Out-Null
+          Copy-Item $rawApk "release_assets/Gramable.apk"
+          Copy-Item $rawApk "release_assets/Gramable-$ver.apk"
+          Write-Host "Artifacts prepared successfully: release_assets/Gramable.apk"
+
+      - name: Handle Beta Release
+        if: ${{ github.event.inputs.release_type == 'beta' }}
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MESSAGE: ${{ github.event.inputs.release_message }}
+        run: |
+          gh release delete beta --cleanup-tag -y 2>$null || Write-Host "No existing beta release to delete."
+
+          $ver = "${{ steps.get_version.outputs.VERSION }}"
+          $inputMsg = $env:RELEASE_MESSAGE
+          if (-not $inputMsg) { $inputMsg = "Automated Beta Build for Gramable version $ver" }
+
+          gh release create beta "release_assets/Gramable.apk" "release_assets/Gramable-$ver.apk" `
+            --title "Beta: $ver" `
+            --notes "$inputMsg" `
+            --prerelease `
+            --target "${{ github.sha }}"
+
+      - name: Handle Stable Release
+        if: ${{ github.event.inputs.release_type == 'stable' }}
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MESSAGE: ${{ github.event.inputs.release_message }}
+          WHATS_NEW: ${{ github.event.inputs.whats_new }}
+        run: |
+          $ver = "${{ steps.get_version.outputs.VERSION }}"
+          $tag = "v$ver"
+
+          $env:RELEASE_MESSAGE | Set-Content -Path "release_notes.txt" -Encoding utf8
+
+          gh release create $tag "release_assets/Gramable.apk" "release_assets/Gramable-$ver.apk" `
+            --title "Version $ver" `
+            --notes-file "release_notes.txt"
+
+          Remove-Item "release_notes.txt" -Force -ErrorAction SilentlyContinue
+
+      - name: Push In-App Update Notification (update.json)
+        if: ${{ github.event.inputs.send_notification == 'true' || github.event.inputs.send_notification == true }}
+        shell: pwsh
+        env:
+          WHATS_NEW: ${{ github.event.inputs.whats_new }}
+          RELEASE_MESSAGE: ${{ github.event.inputs.release_message }}
+        run: |
+          $ver = "${{ steps.get_version.outputs.VERSION }}"
+          $apkCode = [int]"${{ steps.get_version.outputs.APK_VERSION_CODE }}"
+          $relType = "${{ github.event.inputs.release_type }}"
+
+          $tag = if ($relType -eq "stable") { "v$ver" } else { "beta" }
+          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/Gramable.apk"
+
+          $news = $env:WHATS_NEW
+          if (-not $news) { $news = $env:RELEASE_MESSAGE }
+          if (-not $news) { $news = "New Gramable update available ($ver)." }
+
+          # Update update.json
+          $updateObj = [ordered]@{
+            version = $ver
+            version_code = $apkCode
+            url = $downloadUrl
+            file_url = $downloadUrl
+            whats_new = $news
+            changelog = $news
+          }
+          $updateJson = $updateObj | ConvertTo-Json -Depth 5
+          [System.IO.File]::WriteAllText("update.json", $updateJson + "`n", [System.Text.UTF8Encoding]::new($false))
+
+          # Update update_info.json (legacy compatibility)
+          $updateInfoObj = [ordered]@{
+            version = $ver
+            version_code = $apkCode
+            url = $downloadUrl
+            file_url = $downloadUrl
+          }
+          $updateInfoJson = $updateInfoObj | ConvertTo-Json -Compress
+          [System.IO.File]::WriteAllText("update_info.json", $updateInfoJson + "`n", [System.Text.UTF8Encoding]::new($false))
+
+          # Commit and push update info
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add update.json update_info.json
+          git commit -m "pushing update"
+          git push origin HEAD:${{ github.ref }}
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('release_assets/Gramable.apk') != ''
+        with:
+          name: Gramable-APK
+          path: release_assets/*.apk

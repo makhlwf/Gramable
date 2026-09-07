@@ -30,6 +30,3 @@ agents/
 *google-services.json
 *agconnect-services.json
 
-# Local properties and credentials
-gradle.properties
-

@@ -216,7 +216,7 @@ android {
             ndk.debugSymbolLevel = 'FULL'
             buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
             buildConfigField "String", "APP_CENTER_HASH", "\"\""
-            buildConfigField "String", "BETA_URL", "\"\""
+            buildConfigField "String", "BETA_URL", "\"" + getUpdateUrl() + "\""
             buildConfigField "boolean", "DEBUG_VERSION", "false"
             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
             buildConfigField "boolean", "BUNDLE", "false"
@@ -232,7 +232,7 @@ android {
             ndk.debugSymbolLevel = 'FULL'
             buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
             buildConfigField "String", "APP_CENTER_HASH", "\"\""
-            buildConfigField "String", "BETA_URL", "\"\""
+            buildConfigField "String", "BETA_URL", "\"" + getUpdateUrl() + "\""
             buildConfigField "boolean", "DEBUG_VERSION", "false"
             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
             buildConfigField "boolean", "BUNDLE", "false"
@@ -249,10 +249,25 @@ def getProps(String propName) {
     if (propsFile.exists()) {
         def props = new Properties()
         props.load(new FileInputStream(propsFile))
-        return props[propName]
-    } else {
-        return "";
+        if (props.containsKey(propName) && props[propName] != null) {
+            return props[propName]
+        }
     }
+    if (project.hasProperty(propName)) {
+        return project.property(propName)
+    }
+    return ""
+}
+
+def getUpdateUrl() {
+    def url = getProps("BETA_URL")
+    if (!url) {
+        url = getProps("BETA_PUBLIC_URL")
+    }
+    if (!url) {
+        url = "https://raw.githubusercontent.com/makhlwf/gramable/master/update.json"
+    }
+    return url
 }
 apply plugin: 'com.google.gms.google-services'
 
