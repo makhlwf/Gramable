@@ -557,6 +557,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     }
 
     public interface ChatMessageCellDelegate {
+        default void addAccessibilityActionsForCell(ChatMessageCell cell, AccessibilityNodeInfo info) {
+        }
+
+        default boolean performAccessibilityActionForCell(ChatMessageCell cell, int action) {
+            return false;
+        }
+
+        default boolean isMessageSelected(int id) {
+            return false;
+        }
+
         default boolean isReplyOrSelf() {
             return false;
         }
@@ -26623,6 +26634,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     @Override
     public boolean performAccessibilityAction(int action, Bundle arguments) {
+        if (delegate != null && delegate.performAccessibilityActionForCell(this, action)) {
+            return true;
+        }
         if (delegate != null && delegate.onAccessibilityAction(action, arguments)) {
             return false;
         }
@@ -26748,6 +26762,13 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
         if (accessibilityTextGranularityHelper != null) {
             accessibilityTextGranularityHelper.onInitializeAccessibilityNodeInfo(info, text);
+        }
+        if (delegate != null) {
+            delegate.addAccessibilityActionsForCell(this, info);
+            if (currentMessageObject != null && delegate.hasSelectedMessages()) {
+                info.setCheckable(true);
+                info.setChecked(delegate.isMessageSelected(currentMessageObject.getId()));
+            }
         }
         info.setFocusable(true);
     }
