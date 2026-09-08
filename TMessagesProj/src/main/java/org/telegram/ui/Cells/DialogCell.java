@@ -5459,8 +5459,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
     @Override
     public boolean performAccessibilityAction(int action, Bundle arguments) {
-        if (action == R.id.acc_action_chat_preview && parentFragment != null) {
-            parentFragment.showChatPreview(this);
+        if (parentFragment != null && parentFragment.performAccessibilityActionForCell(this, action)) {
             return true;
         }
         return super.performAccessibilityAction(action, arguments);
@@ -5471,15 +5470,17 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         super.onInitializeAccessibilityNodeInfo(info);
         if (isFolderCell() && archivedChatsDrawable != null && SharedConfig.archiveHidden && archivedChatsDrawable.getPullProgress() == 0.0f) {
             info.setVisibleToUser(false);
-        } else {
-            info.addAction(AccessibilityNodeInfo.ACTION_CLICK);
-            info.addAction(AccessibilityNodeInfo.ACTION_LONG_CLICK);
-            if (!isFolderCell() && parentFragment != null) {
-                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(R.id.acc_action_chat_preview, getString(R.string.AccActionChatPreview)));
-            }
+            return;
         }
-        if (checkBox != null && checkBox.isChecked()) {
-            info.setClassName("android.widget.CheckBox");
+        info.addAction(AccessibilityNodeInfo.ACTION_CLICK);
+        info.addAction(AccessibilityNodeInfo.ACTION_LONG_CLICK);
+        if (parentFragment != null) {
+            parentFragment.addAccessibilityActionsForCell(this, info);
+            if (parentFragment.getActionBar() != null && parentFragment.getActionBar().isActionModeShowed()) {
+                info.setCheckable(true);
+                info.setChecked(parentFragment.isDialogSelected(currentDialogId));
+            }
+        } else if (checkBox != null && checkBox.isChecked()) {
             info.setCheckable(true);
             info.setChecked(true);
         }
