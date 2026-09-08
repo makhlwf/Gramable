@@ -26,10 +26,7 @@ import android.text.Layout;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityManager;
-import android.view.accessibility.AccessibilityNodeInfo;
-import android.view.accessibility.AccessibilityNodeProvider;
+import android.widget.Button;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
@@ -38,6 +35,9 @@ import androidx.annotation.RawRes;
 import androidx.annotation.StringRes;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
+import androidx.customview.widget.ExploreByTouchHelper;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildConfig;
@@ -124,6 +124,7 @@ public class ProfileActionsView extends View {
     private final Matrix matrix = new Matrix();
 
     public boolean myProfile;
+    private final ProfileActionsAccessibilityHelper accessibilityHelper;
 
     public ProfileActionsView(Context context, int targetHeight) {
         super(context);
@@ -141,6 +142,8 @@ public class ProfileActionsView extends View {
         setBackgroundColor(0);
 
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+        accessibilityHelper = new ProfileActionsAccessibilityHelper(this);
+        ViewCompat.setAccessibilityDelegate(this, accessibilityHelper);
     }
 
     public void drawingBlur(boolean drawing) {
@@ -220,6 +223,7 @@ public class ProfileActionsView extends View {
                 MeasureSpec.getSize(widthMeasureSpec),
                 MeasureSpec.makeMeasureSpec((int) (targetHeight + top + ypadding), MeasureSpec.EXACTLY)
         );
+        checkActionsRects();
     }
 
     public void updatePosition(float y, float newHeight) {
@@ -231,7 +235,42 @@ public class ProfileActionsView extends View {
     private float getItemWidth() {
         int w = getMeasuredWidth();
         float betweenPadding = xpadding / 2f;
-        return (w - betweenPadding * (activeCount - 1) - xpadding * 2f) / activeCount;
+        int count = Math.max(1, activeCount > 0 ? activeCount : actions.size());
+        return (w - betweenPadding * (count - 1) - xpadding * 2f) / count;
+    }
+
+    private void checkActionsRects() {
+        int w = getMeasuredWidth();
+        int count = activeCount > 0 ? activeCount : actions.size();
+        if (w <= 0 || count <= 0) {
+            return;
+        }
+        float height = Math.max(0f, currentHeight - ypadding - top);
+        if (height <= 0f) {
+            height = targetHeight;
+        }
+        final float betweenPadding = xpadding / 2f;
+        final float width = (w - betweenPadding * (count - 1) - xpadding * 2f) / count;
+        float left = xpadding;
+        int c = actions.size();
+        for (int i = 0; i < c; i++) {
+            Action action = actions.get(i);
+            if (action.isDeleted) continue;
+            if (!action.isDeleting) {
+                if (action.rect.isEmpty()) {
+                    action.rect.set(left, top, left + width, top + height);
+                }
+                left += width + betweenPadding;
+            }
+        }
+    }
+
+    @Override
+    protected boolean dispatchHoverEvent(MotionEvent event) {
+        if (accessibilityHelper != null && accessibilityHelper.dispatchHoverEvent(event)) {
+            return true;
+        }
+        return super.dispatchHoverEvent(event);
     }
 
     @Override
@@ -622,6 +661,9 @@ public class ProfileActionsView extends View {
         if (notificationAction != null) {
             updateNotification(notificationAction, animated);
             invalidate();
+            if (accessibilityHelper != null) {
+                accessibilityHelper.invalidateVirtualView(KEY_NOTIFICATION);
+            }
         } else {
             allAvailableActions.add(KEY_NOTIFICATION);
             applyVisibleActions();
@@ -632,18 +674,30 @@ public class ProfileActionsView extends View {
         Action action = new Action(ActionButton.SET_PHOTO);
         action.key = KEY_SET_PHOTO;
         actions.add(action);
+        checkActionsRects();
+        if (accessibilityHelper != null) {
+            accessibilityHelper.invalidateRoot();
+        }
     }
 
     public void addEditInfo() {
         final Action action = new Action(ActionButton.EDIT_INFO);
         action.key = KEY_EDIT_INFO;
         actions.add(action);
+        checkActionsRects();
+        if (accessibilityHelper != null) {
+            accessibilityHelper.invalidateRoot();
+        }
     }
 
     public void addSettings() {
         final Action action = new Action(ActionButton.SETTINGS);
         action.key = KEY_SETTINGS;
         actions.add(action);
+        checkActionsRects();
+        if (accessibilityHelper != null) {
+            accessibilityHelper.invalidateRoot();
+        }
     }
 
     public void startAnimatedActions() {
@@ -704,7 +758,11 @@ public class ProfileActionsView extends View {
         if (isApplying) return;
         if (mode == MODE_MY_PROFILE) {
             activeCount = actions.size();
+            checkActionsRects();
             invalidate();
+            if (accessibilityHelper != null) {
+                accessibilityHelper.invalidateRoot();
+            }
             return;
         }
 
@@ -789,7 +847,11 @@ public class ProfileActionsView extends View {
 
             actions.clear();
             actions.addAll(out);
+            checkActionsRects();
             invalidate();
+            if (accessibilityHelper != null) {
+                accessibilityHelper.invalidateRoot();
+            }
         });
     }
 
@@ -1245,113 +1307,108 @@ public class ProfileActionsView extends View {
         }
     }
 
-    private AccessibilityNodeProvider accessibilityNodeProvider;
-    @Override
-    public AccessibilityNodeProvider getAccessibilityNodeProvider() {
-        if (accessibilityNodeProvider == null) {
-            accessibilityNodeProvider = new AccessibilityNodeProvider() {
-                @Override
-                public AccessibilityNodeInfo createAccessibilityNodeInfo(int virtualViewId) {
-                    int[] pos = {0, 0};
-                    getLocationOnScreen(pos);
-                    if (virtualViewId == HOST_VIEW_ID) {
-                        AccessibilityNodeInfo info = AccessibilityNodeInfo.obtain(ProfileActionsView.this);
-                        onInitializeAccessibilityNodeInfo(info);
-                        info.setEnabled(true);
+    private class ProfileActionsAccessibilityHelper extends ExploreByTouchHelper {
 
-                        for (int i = 0; i < actions.size(); ++i) {
-                            info.addChild(ProfileActionsView.this, actions.get(i).key);
-                        }
+        private final Rect tmpRect = new Rect();
 
-                        return info;
-                    } else {
-                        Action action = null;
-                        for (int i = 0; i < actions.size(); ++i) {
-                            if (actions.get(i).key == virtualViewId) {
-                                action = actions.get(i);
-                                break;
-                            }
-                        }
-                        if (action == null) return null;
-                        if (action.rect.isEmpty()) return null;
-
-                        AccessibilityNodeInfo info = AccessibilityNodeInfo.obtain();
-                        info.setSource(ProfileActionsView.this, virtualViewId);
-                        info.setParent(ProfileActionsView.this);
-                        info.setPackageName(getContext().getPackageName());
-
-                        info.addAction(AccessibilityNodeInfo.ACTION_CLICK);
-                        info.addAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS);
-                        info.setClickable(true);
-                        info.setFocusable(true);
-                        info.setEnabled(true);
-                        info.setVisibleToUser(true);
-                        info.setClassName(android.widget.Button.class.getName());
-
-                        info.setText(action.text.getText());
-
-                        Rect parentBounds = new Rect(
-                                (int) action.rect.left,
-                                (int) action.rect.top,
-                                (int) action.rect.right,
-                                (int) action.rect.bottom
-                        );
-                        info.setBoundsInParent(parentBounds);
-                        parentBounds.offset(pos[0], pos[1]);
-                        info.setBoundsInScreen(parentBounds);
-
-                        return info;
-                    }
-                }
-
-                @Override
-                public boolean performAction(int virtualViewId, int action, @Nullable Bundle arguments) {
-                    if (virtualViewId == HOST_VIEW_ID) {
-                        return performAccessibilityAction(action, arguments);
-                    }
-
-                    Action button = null;
-                    for (int i = 0; i < actions.size(); ++i) {
-                        if (actions.get(i).key == virtualViewId) {
-                            button = actions.get(i);
-                            break;
-                        }
-                    }
-                    if (button == null) return false;
-
-                    if (action == AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) {
-                        sendAccessibilityEventForVirtualView(virtualViewId, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED);
-                        return true;
-                    } else if (action == AccessibilityNodeInfo.ACTION_CLICK) {
-                        if (onActionClickListener != null) {
-                            onActionClickListener.onClick(virtualViewId, 0, 0);
-                        }
-                        return true;
-                    }
-
-                    return false;
-                }
-
-                private void sendAccessibilityEventForVirtualView(int viewId, int eventType) {
-                    sendAccessibilityEventForVirtualView(viewId, eventType, null);
-                }
-
-                private void sendAccessibilityEventForVirtualView(int viewId, int eventType, String text) {
-                    AccessibilityManager am = (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
-                    if (am.isTouchExplorationEnabled()) {
-                        AccessibilityEvent event = AccessibilityEvent.obtain(eventType);
-                        event.setPackageName(getContext().getPackageName());
-                        event.setSource(ProfileActionsView.this, viewId);
-                        if (text != null) {
-                            event.getText().add(text);
-                        }
-                        if (getParent() != null) {
-                            getParent().requestSendAccessibilityEvent(ProfileActionsView.this, event);
-                        }
-                    }
-                }
-            };
+        public ProfileActionsAccessibilityHelper(@NonNull View host) {
+            super(host);
         }
-        return accessibilityNodeProvider;
+
+        @Override
+        protected int getVirtualViewAt(float x, float y) {
+            if (currentHeight > 0 && currentHeight < dp(8)) {
+                return HOST_ID;
+            }
+            checkActionsRects();
+            int c = actions.size();
+            for (int i = 0; i < c; i++) {
+                Action a = actions.get(i);
+                if (!a.isDeleting && !a.isDeleted) {
+                    if (a.rect.contains(x, y) || (x >= a.rect.left && x <= a.rect.right && y >= 0 && y <= getMeasuredHeight())) {
+                        return a.key;
+                    }
+                }
+            }
+            return HOST_ID;
+        }
+
+        @Override
+        protected void getVisibleVirtualViews(List<Integer> list) {
+            if (currentHeight > 0 && currentHeight < dp(8)) {
+                return;
+            }
+            checkActionsRects();
+            int c = actions.size();
+            for (int i = 0; i < c; i++) {
+                Action a = actions.get(i);
+                if (!a.isDeleting && !a.isDeleted) {
+                    list.add(a.key);
+                }
+            }
+        }
+
+        @Override
+        protected void onPopulateNodeForVirtualView(int virtualViewId, @NonNull AccessibilityNodeInfoCompat info) {
+            Action action = find(virtualViewId);
+            if (action == null || action.isDeleted) {
+                tmpRect.set(0, 0, 1, 1);
+                info.setBoundsInParent(tmpRect);
+                info.setContentDescription("");
+                info.setVisibleToUser(false);
+                return;
+            }
+            checkActionsRects();
+
+            CharSequence text = action.text != null ? action.text.getText() : null;
+            if (text == null) {
+                text = "";
+            }
+            info.setText(text);
+            info.setContentDescription(text);
+            info.setClassName(Button.class.getName());
+            info.addAction(AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_CLICK);
+            info.setClickable(true);
+            info.setFocusable(true);
+            info.setEnabled(true);
+            info.setVisibleToUser(true);
+
+            tmpRect.set(
+                    (int) action.rect.left,
+                    (int) action.rect.top,
+                    (int) action.rect.right,
+                    (int) action.rect.bottom
+            );
+            if (tmpRect.isEmpty()) {
+                tmpRect.set(0, 0, 1, 1);
+            }
+            info.setBoundsInParent(tmpRect);
+        }
+
+        @Override
+        protected boolean onPerformActionForVirtualView(int virtualViewId, int action, @Nullable Bundle arguments) {
+            if (action == AccessibilityNodeInfoCompat.ACTION_CLICK) {
+                Action a = find(virtualViewId);
+                if (a != null) {
+                    if (a.supportsLoading && !a.isLoading) {
+                        a.isLoading = true;
+                        invalidate();
+                    }
+                    if (a.supportsAnimate != 0) {
+                        a.updateDrawable(true, a.supportsAnimate);
+                    }
+                    a.startTime = System.currentTimeMillis();
+                }
+                if (onActionClickListener != null) {
+                    if (a != null) {
+                        onActionClickListener.onClick(virtualViewId, a.rect.left, a.rect.top);
+                    } else {
+                        onActionClickListener.onClick(virtualViewId, 0, 0);
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
     }
 }
