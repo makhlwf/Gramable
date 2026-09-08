@@ -285,7 +285,7 @@ jobs:
         shell: bash
         run: |
           chmod +x gradlew
-          ./gradlew :TMessagesProj_App:assembleAfatRelease -PabiFilters=arm64-v8a --parallel --stacktrace
+          ./gradlew :TMessagesProj_App:assembleAfatRelease --parallel --stacktrace
 
       - name: Prepare Artifacts
         shell: pwsh

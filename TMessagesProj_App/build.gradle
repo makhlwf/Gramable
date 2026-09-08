@@ -138,11 +138,7 @@ android {
         }
         afat {
             ndk {
-                if (project.hasProperty("abiFilters")) {
-                    abiFilters project.property("abiFilters").split(",").collect { it.trim() }
-                } else {
-                    abiFilters "arm64-v8a"
-                }
+                abiFilters "arm64-v8a"
             }
             sourceSets.debug {
                 manifest.srcFile '../TMessagesProj/config/debug/AndroidManifest_SDK23.xml'
