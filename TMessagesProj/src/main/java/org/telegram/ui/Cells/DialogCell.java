@@ -5476,7 +5476,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
         info.addAction(AccessibilityNodeInfo.ACTION_LONG_CLICK);
         if (parentFragment != null) {
             parentFragment.addAccessibilityActionsForCell(this, info);
-            if (parentFragment.getActionBar() != null && parentFragment.getActionBar().isActionModeShowed()) {
+            if (!isFolderCell() && parentFragment.getActionBar() != null && parentFragment.getActionBar().isActionModeShowed()) {
                 info.setCheckable(true);
                 info.setChecked(parentFragment.isDialogSelected(currentDialogId));
             }

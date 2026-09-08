@@ -10436,10 +10436,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void handleRemoveFromFolder(ArrayList<Long> dialogs) {
-        if (viewPages == null || viewPages.length == 0 || viewPages[0] == null) {
+        ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
+        int type = viewPages != null && viewPages.length > 0 && viewPages[0] != null ? viewPages[0].selectedType : -1;
+        if (filters == null || type < 0 || type >= filters.size()) {
             return;
         }
-        MessagesController.DialogFilter filter = getMessagesController().getDialogFilters().get(viewPages[0].selectedType);
+        MessagesController.DialogFilter filter = filters.get(type);
         ArrayList<Long> neverShow = FiltersListBottomSheet.getDialogsCount(DialogsActivity.this, filter, dialogs, false, false);
 
         int currentCount;
