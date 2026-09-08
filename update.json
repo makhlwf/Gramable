@@ -1,8 +1,8 @@
 {
-  "version": "12.10.1",
-  "version_code": 70419,
-  "url": "https://github.com/makhlwf/Gramable/releases/download/v12.10.1/Gramable.apk",
-  "file_url": "https://github.com/makhlwf/Gramable/releases/download/v12.10.1/Gramable.apk",
-  "whats_new": "ferst release",
-  "changelog": "ferst release"
+  "version": "G1.3T12.10.1",
+  "version_code": 70429,
+  "url": "https://github.com/makhlwf/Gramable/releases/download/vG1.3T12.10.1/Gramable.apk",
+  "file_url": "https://github.com/makhlwf/Gramable/releases/download/vG1.3T12.10.1/Gramable.apk",
+  "whats_new": "Release G1.3T12.10.1 with update check fixes and accessibility improvements",
+  "changelog": "Release G1.3T12.10.1 with update check fixes and accessibility improvements"
 }
