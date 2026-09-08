@@ -1038,6 +1038,7 @@ public class ChatActivity extends BaseFragment implements
     private boolean scrimPopupWindowHideDimOnDismiss = true;
     private int scrimPopupX, scrimPopupY;
     private ActionBarMenuSubItem[] scrimPopupWindowItems;
+    private ReactionsContainerLayout currentReactionsLayout;
     private ActionBarMenuSubItem menuDeleteItem;
     private final Runnable updateDeleteItemRunnable = new Runnable() {
         @Override
@@ -32100,6 +32101,7 @@ public class ChatActivity extends BaseFragment implements
             } else {
                 final boolean tags = getUserConfig().getClientUserId() == getDialogId();
                 reactionsLayout = new ReactionsContainerLayout(tags ? ReactionsContainerLayout.TYPE_TAGS : ReactionsContainerLayout.TYPE_DEFAULT, ChatActivity.this, contentView.getContext(), currentAccount, getResourceProvider());
+                currentReactionsLayout = reactionsLayout;
                 reactionsLayout.setBackgroundFactory(scrimBlur3Factory, BlurredBackgroundProviderImpl.messageMenuReactionsBackground(resourceProvider));
                 if (tags) {
                     reactionsLayout.setHint(getUserConfig().isPremium() ? LocaleController.getString(R.string.SavedTagReactionsHint2) : AndroidUtilities.replaceSingleTag(LocaleController.getString(R.string.SavedTagReactionsPremiumHint), Theme.key_windowBackgroundWhiteBlueText2, 0, () -> {
@@ -32319,6 +32321,7 @@ public class ChatActivity extends BaseFragment implements
                     scrimPopupWindow = null;
                     menuDeleteItem = null;
                     scrimPopupWindowItems = null;
+                    currentReactionsLayout = null;
                     chatLayoutManager.setCanScrollVertically(true);
                     if (scrimPopupWindowHideDimOnDismiss) {
                         dimBehindView(false);
@@ -32689,6 +32692,7 @@ public class ChatActivity extends BaseFragment implements
     private ValueAnimator scrimViewAlphaAnimator;
 
     private void closeMenu(boolean hideDim) {
+        currentReactionsLayout = null;
         scrimPopupWindowHideDimOnDismiss = hideDim;
         if (scrimPopupWindow != null) {
             scrimPopupWindow.dismiss();
@@ -38913,7 +38917,347 @@ public class ChatActivity extends BaseFragment implements
         return msg;
     }
 
+    public boolean canPerformReply() {
+        return !isReport() && !inPreviewMode;
+    }
+
+    public boolean isMessageSelected(int id) {
+        return (selectedMessagesIds[0] != null && selectedMessagesIds[0].indexOfKey(id) >= 0)
+            || (selectedMessagesIds[1] != null && selectedMessagesIds[1].indexOfKey(id) >= 0);
+    }
+
+    public void addAccessibilityActionsForCell(ChatMessageCell cell, AccessibilityNodeInfo info) {
+        if (cell == null || info == null) {
+            return;
+        }
+        MessageObject message = cell.getMessageObject();
+        if (message == null || message.messageOwner == null) {
+            return;
+        }
+
+        final boolean inActionMode = actionBar != null && actionBar.isActionModeShowed();
+        final boolean isSelected = inActionMode && isMessageSelected(message.getId());
+
+        if (inActionMode) {
+            if (isSelected) {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_toggle_selection,
+                    LocaleController.getString(R.string.Deselect)
+                ));
+            } else {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_toggle_selection,
+                    LocaleController.getString(R.string.Select)
+                ));
+            }
+
+            int selectedTotal = (selectedMessagesIds[0] != null ? selectedMessagesIds[0].size() : 0) + (selectedMessagesIds[1] != null ? selectedMessagesIds[1].size() : 0);
+            if (isSelected && selectedTotal > 1) {
+                populateBulkMessageAccessibilityActions(info);
+                return;
+            }
+        } else {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_toggle_selection,
+                LocaleController.getString(R.string.AccActionEnterSelectionMode)
+            ));
+        }
+
+        // Reply
+        if (canPerformReply() && !message.messageOwner.noforwards && chatMode != MODE_WELCOME_MESSAGES && !isInsideContainer && (currentChat == null || ChatObject.canSendMessages(currentChat))) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_reply,
+                LocaleController.getString(R.string.Reply)
+            ));
+        }
+
+        // Copy
+        boolean noforwards = isPeerNoForwards() || message.messageOwner.noforwards || getDialogId() == UserObject.VERIFY;
+        boolean noforwardsOrPaidMedia = noforwards || message.type == MessageObject.TYPE_PAID_MEDIA;
+        if ((message.type == MessageObject.TYPE_TEXT || message.type == MessageObject.TYPE_ARTICLE || message.isDice() || message.isAnimatedEmoji() || message.isAnimatedEmojiStickers() || getMessageCaption(message, cell.getCurrentMessagesGroup()) != null) && (!noforwardsOrPaidMedia || message.isEphemeral()) && !message.sponsoredCanReport) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_copy,
+                LocaleController.getString(R.string.Copy)
+            ));
+        }
+
+        // Forward
+        final boolean canForward = !message.isSponsored()
+            && !isQuickRepliesOrWelcomeMessagesMode()
+            && chatMode != MODE_SCHEDULED
+            && (!message.needDrawBluredPreview() || message.hasExtendedMediaPreview())
+            && !message.isLiveLocation()
+            && message.type != MessageObject.TYPE_PHONE_CALL
+            && !noforwards && message.type != MessageObject.TYPE_SHARING_OFFER
+            && message.type != MessageObject.TYPE_GIFT_PREMIUM
+            && message.type != MessageObject.TYPE_GIFT_OFFER
+            && message.type != MessageObject.TYPE_COMMUNITY_CHANGED
+            && message.type != MessageObject.TYPE_GIFT_OFFER_REJECTED
+            && message.type != MessageObject.TYPE_GIFT_PREMIUM_CHANNEL
+            && message.type != MessageObject.TYPE_SUGGEST_PHOTO
+            && !message.isWallpaperAction()
+            && !message.isExpiredStory()
+            && message.type != MessageObject.TYPE_STORY_MENTION
+            && message.type != MessageObject.TYPE_GIFT_STARS;
+        if (canForward) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_forward,
+                LocaleController.getString(R.string.Forward)
+            ));
+        }
+
+        // Reactions
+        if (isReactionsAvailableForCellMessage(message)) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_open_reactions,
+                LocaleController.getString(R.string.Reactions)
+            ));
+        }
+
+        // Edit
+        boolean allowEdit = !message.isEphemeral() && message.canEditMessage(currentChat) && (chatActivityEnterView == null || !chatActivityEnterView.hasAudioToSend()) && message.getDialogId() != mergeDialogId && message.type != MessageObject.TYPE_STORY && message.type != MessageObject.TYPE_POLL;
+        if (allowEdit || chatMode == MODE_WELCOME_MESSAGES) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_edit,
+                LocaleController.getString(R.string.Edit)
+            ));
+        }
+
+        // Pin / Unpin
+        boolean allowPin;
+        if (chatMode == MODE_SAVED || isQuickRepliesOrWelcomeMessagesMode() || message.isEphemeral()) {
+            allowPin = false;
+        } else if (chatMode == MODE_SCHEDULED || (isThreadChat() && !isTopic)) {
+            allowPin = false;
+        } else if (currentChat != null) {
+            allowPin = message.getDialogId() != mergeDialogId && ChatObject.canPinMessages(currentChat) && (!currentChat.monoforum);
+        } else if (currentEncryptedChat == null) {
+            if (UserObject.isDeleted(currentUser)) {
+                allowPin = false;
+            } else if (userInfo != null) {
+                allowPin = userInfo.can_pin_message;
+            } else {
+                allowPin = false;
+            }
+        } else {
+            allowPin = false;
+        }
+        if (UserObject.isReplyUser(dialog_id) || dialog_id == UserObject.VERIFY) {
+            allowPin = false;
+        }
+        allowPin = allowPin && message.getId() > 0 && (message.messageOwner.action == null || message.messageOwner.action instanceof TLRPC.TL_messageActionEmpty) && !message.isExpiredStory() && message.type != MessageObject.TYPE_STORY_MENTION;
+
+        if (allowPin) {
+            boolean isPinned = pinnedMessageObjects.containsKey(message.getId()) || (cell.getCurrentMessagesGroup() != null && !cell.getCurrentMessagesGroup().messages.isEmpty() && pinnedMessageObjects.containsKey(cell.getCurrentMessagesGroup().messages.get(0).getId()));
+            if (isPinned) {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_unpin,
+                    LocaleController.getString(R.string.UnpinMessage)
+                ));
+            } else {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_pin,
+                    LocaleController.getString(R.string.PinMessage)
+                ));
+            }
+        }
+
+        // Delete
+        if (message.canDeleteMessage(chatMode == MODE_SCHEDULED, currentChat) && (threadMessageObjects == null || !threadMessageObjects.contains(message))) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_delete,
+                LocaleController.getString(chatMode == MODE_SAVED && threadMessageId != getUserConfig().getClientUserId() ? R.string.Remove : R.string.Delete)
+            ));
+        }
+    }
+
+    private boolean isReactionsAvailableForCellMessage(MessageObject message) {
+        if (message == null || message.isEphemeral()) {
+            return false;
+        }
+        List<TLRPC.TL_availableReaction> availableReacts = getMediaDataController().getEnabledReactionsList();
+        if (availableReacts == null || availableReacts.isEmpty()) {
+            return false;
+        }
+        if (message.isForwardedChannelPost()) {
+            TLRPC.ChatFull cInfo = getMessagesController().getChatFull(-message.getFromChatId());
+            if (cInfo == null) {
+                return true;
+            }
+            return !isSecretChat()
+                && !isQuickRepliesOrWelcomeMessagesMode()
+                && !isInScheduleMode()
+                && message.isReactionsAvailable()
+                && (!(cInfo.available_reactions instanceof TLRPC.TL_chatReactionsNone) || cInfo.paid_reactions_available);
+        } else {
+            return !isSecretChat()
+                && !isQuickRepliesOrWelcomeMessagesMode()
+                && !isInScheduleMode()
+                && message.isReactionsAvailable()
+                && !message.isSecretMedia()
+                && (chatInfo != null && (!(chatInfo.available_reactions instanceof TLRPC.TL_chatReactionsNone) || chatInfo.paid_reactions_available)
+                    || (chatInfo == null && !ChatObject.isChannel(currentChat))
+                    || currentUser != null
+                    || ChatObject.isMonoForum(currentChat))
+                && (currentChat == null || ChatObject.isChannelAndNotMegaGroup(currentChat) || ChatObject.canUserDoAction(currentChat, ChatObject.ACTION_SEND_REACTIONS));
+        }
+    }
+
+    private void populateBulkMessageAccessibilityActions(AccessibilityNodeInfo info) {
+        int selectedTotal = (selectedMessagesIds[0] != null ? selectedMessagesIds[0].size() : 0) + (selectedMessagesIds[1] != null ? selectedMessagesIds[1].size() : 0);
+        if (selectedTotal <= 0) {
+            return;
+        }
+        if (cantDeleteMessagesCount == 0) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_delete,
+                LocaleController.getString(chatMode == MODE_SAVED && threadMessageId != getUserConfig().getClientUserId() ? R.string.Remove : R.string.Delete)
+            ));
+        }
+        if (cantForwardMessagesCount == 0 && chatMode != MODE_SCHEDULED) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_forward,
+                LocaleController.getString(R.string.Forward)
+            ));
+        }
+        int canCopyTotal = (selectedMessagesCanCopyIds[0] != null ? selectedMessagesCanCopyIds[0].size() : 0) + (selectedMessagesCanCopyIds[1] != null ? selectedMessagesCanCopyIds[1].size() : 0);
+        if (canCopyTotal > 0 && canCopyTotal == selectedTotal) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_copy,
+                LocaleController.getString(R.string.Copy)
+            ));
+        }
+    }
+
+    public boolean performAccessibilityActionForCell(ChatMessageCell cell, int action) {
+        if (cell == null) {
+            return false;
+        }
+        MessageObject message = cell.getMessageObject();
+        if (message == null || message.messageOwner == null) {
+            return false;
+        }
+
+        final boolean inActionMode = actionBar != null && actionBar.isActionModeShowed();
+        final boolean isSelected = inActionMode && isMessageSelected(message.getId());
+
+        if (action == R.id.acc_action_toggle_selection) {
+            if (!inActionMode) {
+                startMultiselect(chatListView.getChildAdapterPosition(cell));
+            }
+            addToSelectedMessages(message, true);
+            return true;
+        }
+
+        int selectedTotal = (selectedMessagesIds[0] != null ? selectedMessagesIds[0].size() : 0) + (selectedMessagesIds[1] != null ? selectedMessagesIds[1].size() : 0);
+        if (isSelected && selectedTotal > 1) {
+            if (action == R.id.acc_action_delete) {
+                createDeleteMessagesAlert(null, null, true);
+                return true;
+            } else if (action == R.id.acc_action_forward) {
+                openForward(true);
+                return true;
+            } else if (action == R.id.acc_action_copy) {
+                copySelectedMessagesForAccessibility();
+                return true;
+            }
+        }
+
+        if (action == R.id.acc_action_copy) {
+            selectedObject = message;
+            selectedObjectGroup = cell.getCurrentMessagesGroup();
+            processSelectedOption(OPTION_COPY);
+            return true;
+        } else if (action == R.id.acc_action_reply) {
+            selectedObject = message;
+            selectedObjectGroup = cell.getCurrentMessagesGroup();
+            processSelectedOption(OPTION_REPLY);
+            return true;
+        } else if (action == R.id.acc_action_forward) {
+            selectedObject = message;
+            selectedObjectGroup = cell.getCurrentMessagesGroup();
+            processSelectedOption(OPTION_FORWARD);
+            return true;
+        } else if (action == R.id.acc_action_open_reactions) {
+            createMenu(cell, false, false, cell.getX() + cell.getWidth() / 2f, cell.getY() + cell.getHeight() / 2f, false);
+            if (currentReactionsLayout != null) {
+                currentReactionsLayout.showCustomEmojiReactionDialog();
+            }
+            return true;
+        } else if (action == R.id.acc_action_edit) {
+            selectedObject = message;
+            selectedObjectGroup = cell.getCurrentMessagesGroup();
+            processSelectedOption(OPTION_EDIT);
+            return true;
+        } else if (action == R.id.acc_action_pin) {
+            selectedObject = message;
+            selectedObjectGroup = cell.getCurrentMessagesGroup();
+            processSelectedOption(OPTION_PIN);
+            return true;
+        } else if (action == R.id.acc_action_unpin) {
+            selectedObject = message;
+            selectedObjectGroup = cell.getCurrentMessagesGroup();
+            processSelectedOption(OPTION_UNPIN);
+            return true;
+        } else if (action == R.id.acc_action_delete) {
+            selectedObject = message;
+            selectedObjectGroup = cell.getCurrentMessagesGroup();
+            processSelectedOption(OPTION_DELETE);
+            return true;
+        }
+        return false;
+    }
+
+    private void copySelectedMessagesForAccessibility() {
+        SpannableStringBuilder str = new SpannableStringBuilder();
+        long previousUid = 0;
+        for (int a = 1; a >= 0; a--) {
+            if (selectedMessagesCanCopyIds[a] == null) continue;
+            ArrayList<Integer> ids = new ArrayList<>();
+            for (int b = 0; b < selectedMessagesCanCopyIds[a].size(); b++) {
+                ids.add(selectedMessagesCanCopyIds[a].keyAt(b));
+            }
+            if (currentEncryptedChat == null) {
+                Collections.sort(ids);
+            } else {
+                Collections.sort(ids, Collections.reverseOrder());
+            }
+            for (int b = 0; b < ids.size(); b++) {
+                Integer messageId = ids.get(b);
+                MessageObject messageObject = selectedMessagesCanCopyIds[a].get(messageId);
+                if (str.length() != 0) {
+                    str.append("\n\n");
+                }
+                str.append(getMessageContent(messageObject, previousUid, ids.size() != 1 && (currentUser == null || !currentUser.self)));
+                previousUid = messageObject.getFromChatId();
+            }
+        }
+        if (str.length() != 0) {
+            AndroidUtilities.addToClipboard(str);
+            createUndoView();
+            if (undoView != null) {
+                undoView.showWithAction(0, UndoView.ACTION_TEXT_COPIED, null);
+            }
+        }
+        clearSelectionMode();
+    }
+
     private class ChatMessageCellDelegate implements ChatMessageCell.ChatMessageCellDelegate {
+        @Override
+        public boolean isMessageSelected(int id) {
+            return ChatActivity.this.isMessageSelected(id);
+        }
+
+        @Override
+        public void addAccessibilityActionsForCell(ChatMessageCell cell, AccessibilityNodeInfo info) {
+            ChatActivity.this.addAccessibilityActionsForCell(cell, info);
+        }
+
+        @Override
+        public boolean performAccessibilityActionForCell(ChatMessageCell cell, int action) {
+            return ChatActivity.this.performAccessibilityActionForCell(cell, action);
+        }
+
         @Override
         public boolean isReplyOrSelf() {
             return UserObject.isReplyUser(currentUser) || UserObject.isUserSelf(currentUser);
