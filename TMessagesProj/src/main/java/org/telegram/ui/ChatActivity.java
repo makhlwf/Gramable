@@ -32409,7 +32409,7 @@ public class ChatActivity extends BaseFragment implements
                     finalReactionsLayout.startEnterAnimation(true);
                 }
                 AndroidUtilities.runOnUIThread(() -> {
-                    if (scrimPopupWindowItems != null && scrimPopupWindowItems.length > 0 && scrimPopupWindowItems[0] != null) {
+                    if (scrimPopupWindowItems != null && scrimPopupWindowItems.length > 0 && scrimPopupWindowItems[0] != null && (finalReactionsLayout == null || finalReactionsLayout.getReactionsWindow() == null)) {
                         scrimPopupWindowItems[0].requestFocus();
                         scrimPopupWindowItems[0].performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
                         scrimPopupWindowItems[0].sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);
@@ -39179,9 +39179,21 @@ public class ChatActivity extends BaseFragment implements
             processSelectedOption(OPTION_FORWARD);
             return true;
         } else if (action == R.id.acc_action_open_reactions) {
-            createMenu(cell, false, false, cell.getX() + cell.getWidth() / 2f, cell.getY() + cell.getHeight() / 2f, false);
-            if (currentReactionsLayout != null) {
-                currentReactionsLayout.showCustomEmojiReactionDialog();
+            boolean created = createMenu(cell, true, false, cell.getWidth() / 2f, cell.getHeight() / 2f, false);
+            if (created && currentReactionsLayout != null) {
+                final ReactionsContainerLayout layout = currentReactionsLayout;
+                layout.post(() -> {
+                    if (currentReactionsLayout == layout) {
+                        layout.showCustomEmojiReactionDialog();
+                        if (layout.getReactionsWindow() == null) {
+                            if (layout.recyclerListView != null && layout.recyclerListView.getChildCount() > 0) {
+                                layout.recyclerListView.getChildAt(0).performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
+                            } else {
+                                layout.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
+                            }
+                        }
+                    }
+                });
             }
             return true;
         } else if (action == R.id.acc_action_edit) {

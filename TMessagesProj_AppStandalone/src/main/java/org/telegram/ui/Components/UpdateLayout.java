@@ -10,6 +10,8 @@ import android.graphics.drawable.Drawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.widget.Button;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -51,7 +53,11 @@ public class UpdateLayout extends IUpdateLayout {
                 Long totalSize = (Long) args[2];
                 float loadProgress = loadedSize / (float) totalSize;
                 updateLayoutIcon.setProgress(loadProgress, true);
-                updateTextView.setText(LocaleController.formatString(R.string.AppUpdateDownloading, (int) (loadProgress * 100)));
+                String text = LocaleController.formatString(R.string.AppUpdateDownloading, (int) (loadProgress * 100));
+                updateTextView.setText(text);
+                if (updateLayout != null) {
+                    updateLayout.setContentDescription(text);
+                }
             }
         }
     }
@@ -64,6 +70,23 @@ public class UpdateLayout extends IUpdateLayout {
         updateLayout.setVisibility(View.INVISIBLE);
         updateLayout.setTranslationY(dp(44));
         updateLayout.setBackground(Theme.getSelectorDrawable(0x40ffffff, false));
+        updateLayout.setFocusable(true);
+        updateLayout.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override
+            public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.setClassName(Button.class.getName());
+                CharSequence text = updateLayout.getContentDescription();
+                if (text == null && updateTextView != null) {
+                    text = updateTextView.getText();
+                }
+                if (text != null) {
+                    info.setText(text);
+                    info.setContentDescription(text);
+                }
+                info.setClickable(true);
+            }
+        });
         sideMenuContainer.addView(updateLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 44, Gravity.LEFT | Gravity.BOTTOM));
         updateLayout.setOnClickListener(v -> {
             if (!SharedConfig.isAppUpdateAvailable()) {
@@ -103,6 +126,7 @@ public class UpdateLayout extends IUpdateLayout {
         updateTextView.setTypeface(AndroidUtilities.bold());
         updateTextView.setTextColor(0xffffffff);
         updateTextView.setGravity(Gravity.CENTER);
+        updateTextView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         updateLayout.addView(updateTextView, LayoutHelper.createFrameMatchParent());
         updateTextView.setText(LocaleController.getString(R.string.AppUpdateBeta), false);
 
@@ -147,7 +171,18 @@ public class UpdateLayout extends IUpdateLayout {
                     showSize = true;
                 }
             }
-            updateSizeTextView.setText(showSize ? AndroidUtilities.formatFileSize(SharedConfig.pendingAppUpdate.document.size) : null, animated);
+            String sizeStr = showSize ? AndroidUtilities.formatFileSize(SharedConfig.pendingAppUpdate.document.size) : null;
+            updateSizeTextView.setText(sizeStr, animated);
+            if (updateLayout != null) {
+                CharSequence text = updateTextView != null ? updateTextView.getText() : null;
+                if (text != null) {
+                    if (showSize && sizeStr != null) {
+                        updateLayout.setContentDescription(text + ", " + sizeStr);
+                    } else {
+                        updateLayout.setContentDescription(text);
+                    }
+                }
+            }
             if (updateLayout.getTag() != null) {
                 return;
             }
@@ -181,5 +216,8 @@ public class UpdateLayout extends IUpdateLayout {
 
     private void setUpdateText(String text, boolean animate) {
         updateTextView.setText(text, animate);
+        if (updateLayout != null) {
+            updateLayout.setContentDescription(text);
+        }
     }
 }
