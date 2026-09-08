@@ -285,7 +285,7 @@ jobs:
         shell: bash
         run: |
           chmod +x gradlew
-          ./gradlew :TMessagesProj_App:assembleAfatRelease --stacktrace
+          ./gradlew :TMessagesProj_App:assembleAfatRelease -PabiFilters=arm64-v8a --parallel --stacktrace
 
       - name: Prepare Artifacts
         shell: pwsh
@@ -378,20 +378,10 @@ jobs:
           $updateJson = $updateObj | ConvertTo-Json -Depth 5
           [System.IO.File]::WriteAllText("update.json", $updateJson + "`n", [System.Text.UTF8Encoding]::new($false))
 
-          # Update update_info.json (legacy compatibility)
-          $updateInfoObj = [ordered]@{
-            version = $ver
-            version_code = $apkCode
-            url = $downloadUrl
-            file_url = $downloadUrl
-          }
-          $updateInfoJson = $updateInfoObj | ConvertTo-Json -Compress
-          [System.IO.File]::WriteAllText("update_info.json", $updateInfoJson + "`n", [System.Text.UTF8Encoding]::new($false))
-
           # Commit and push update info
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add update.json update_info.json
+          git add update.json
           git commit -m "pushing update"
           git push origin HEAD:${{ github.ref }}
 
