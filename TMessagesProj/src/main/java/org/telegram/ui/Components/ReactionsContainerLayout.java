@@ -503,7 +503,7 @@ public class ReactionsContainerLayout extends FrameLayout implements Notificatio
         return reactionsWindow;
     }
 
-    private void showCustomEmojiReactionDialog() {
+    public void showCustomEmojiReactionDialog() {
         if (reactionsWindow != null) {
             return;
         }
