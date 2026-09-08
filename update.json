@@ -1,8 +1,8 @@
 {
-  "version": "g1.4t12.10.1",
-  "version_code": 70439,
-  "url": "https://github.com/makhlwf/Gramable/releases/download/vg1.4t12.10.1/Gramable.apk",
-  "file_url": "https://github.com/makhlwf/Gramable/releases/download/vg1.4t12.10.1/Gramable.apk",
-  "whats_new": "Message actions ",
-  "changelog": "Message actions "
+  "version": "g1.5t12.10.1",
+  "version_code": 70449,
+  "url": "https://github.com/makhlwf/Gramable/releases/download/vg1.5t12.10.1/Gramable.apk",
+  "file_url": "https://github.com/makhlwf/Gramable/releases/download/vg1.5t12.10.1/Gramable.apk",
+  "whats_new": "Fix message reactions TalkBack action and make app update banner accessible",
+  "changelog": "Fix message reactions TalkBack action and make app update banner accessible"
 }
