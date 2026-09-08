@@ -681,6 +681,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private int canReadCount;
     private int canPinCount;
+    private int canUnpinCount;
     private int canMuteCount;
     private int canUnmuteCount;
     private int canClearCacheCount;
@@ -3918,100 +3919,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     openAccountSelector(switchItem);
                 } else if (id == add_to_folder) {
                     FiltersListBottomSheet sheet = new FiltersListBottomSheet(DialogsActivity.this, selectedDialogs);
-                    sheet.setDelegate((filter, checked) -> {
-                        ArrayList<Long> alwaysShow = FiltersListBottomSheet.getDialogsCount(DialogsActivity.this, filter, selectedDialogs, true, false);
-                        if (!checked) {
-                            int currentCount;
-                            if (filter != null) {
-                                currentCount = filter.alwaysShow.size();
-                            } else {
-                                currentCount = 0;
-                            }
-                            int totalCount = currentCount + alwaysShow.size();
-                            if ((totalCount > getMessagesController().dialogFiltersChatsLimitDefault && !getUserConfig().isPremium()) || totalCount > getMessagesController().dialogFiltersChatsLimitPremium) {
-                                showDialog(new LimitReachedBottomSheet(DialogsActivity.this, fragmentView.getContext(), LimitReachedBottomSheet.TYPE_CHATS_IN_FOLDER, currentAccount, null));
-                                return;
-                            }
-                        }
-                        if (filter != null) {
-                            if (checked) {
-                                for (int a = 0; a < selectedDialogs.size(); a++) {
-                                    filter.neverShow.add(selectedDialogs.get(a));
-                                    filter.alwaysShow.remove(selectedDialogs.get(a));
-                                }
-                                FilterCreateActivity.saveFilterToServer(filter, filter.flags, filter.name, filter.entities, filter.title_noanimate, filter.color, filter.alwaysShow, filter.neverShow, filter.pinnedDialogs, false, false, true, true, false, DialogsActivity.this, null);
-                                long did;
-                                if (selectedDialogs.size() == 1) {
-                                    did = selectedDialogs.get(0);
-                                } else {
-                                    did = 0;
-                                }
-                                final UndoView undoView = getUndoView();
-                                if (undoView != null) {
-                                    undoView.showWithAction(did, UndoView.ACTION_REMOVED_FROM_FOLDER, selectedDialogs.size(), filter, null, null);
-                                }
-                            } else {
-                                if (!alwaysShow.isEmpty()) {
-                                    for (int a = 0; a < alwaysShow.size(); a++) {
-                                        filter.neverShow.remove(alwaysShow.get(a));
-                                    }
-                                    filter.alwaysShow.addAll(alwaysShow);
-                                    FilterCreateActivity.saveFilterToServer(filter, filter.flags, filter.name, filter.entities, filter.title_noanimate, filter.color, filter.alwaysShow, filter.neverShow, filter.pinnedDialogs, false, false, true, true, false, DialogsActivity.this, null);
-                                }
-                                long did;
-                                if (alwaysShow.size() == 1) {
-                                    did = alwaysShow.get(0);
-                                } else {
-                                    did = 0;
-                                }
-                                final UndoView undoView = getUndoView();
-                                if (undoView != null) {
-                                    undoView.showWithAction(did, UndoView.ACTION_ADDED_TO_FOLDER, alwaysShow.size(), filter, null, null);
-                                }
-                            }
-                        } else {
-                            presentFragment(new FilterCreateActivity(null, alwaysShow));
-                        }
-                        hideActionMode(true);
-                    });
+                    sheet.setDelegate((filter, checked) -> handleAddToFolderDelegate(filter, checked, selectedDialogs));
                     showDialog(sheet);
                 } else if (id == remove_from_folder) {
-                    MessagesController.DialogFilter filter = getMessagesController().getDialogFilters().get(viewPages[0].selectedType);
-                    ArrayList<Long> neverShow = FiltersListBottomSheet.getDialogsCount(DialogsActivity.this, filter, selectedDialogs, false, false);
-
-                    int currentCount;
-                    if (filter != null) {
-                        currentCount = filter.neverShow.size();
-                    } else {
-                        currentCount = 0;
-                    }
-                    if (currentCount + neverShow.size() > 100) {
-                        showDialog(AlertsCreator.createSimpleAlert(getParentActivity(), LocaleController.getString(R.string.FilterAddToAlertFullTitle), LocaleController.getString(R.string.FilterAddToAlertFullText)).create());
-                        return;
-                    }
-                    if (!neverShow.isEmpty()) {
-                        filter.neverShow.addAll(neverShow);
-                        for (int a = 0; a < neverShow.size(); a++) {
-                            Long did = neverShow.get(a);
-                            filter.alwaysShow.remove(did);
-                            filter.pinnedDialogs.delete(did);
-                        }
-                        if (filter.isChatlist()) {
-                            filter.neverShow.clear();
-                        }
-                        FilterCreateActivity.saveFilterToServer(filter, filter.flags, filter.name, filter.entities, filter.title_noanimate, filter.color, filter.alwaysShow, filter.neverShow, filter.pinnedDialogs, false, false, true, false, false, DialogsActivity.this, null);
-                    }
-                    long did;
-                    if (neverShow.size() == 1) {
-                        did = neverShow.get(0);
-                    } else {
-                        did = 0;
-                    }
-                    final UndoView undoView = getUndoView();
-                    if (undoView != null) {
-                        undoView.showWithAction(did, UndoView.ACTION_REMOVED_FROM_FOLDER, neverShow.size(), filter, null, null);
-                    }
-                    hideActionMode(false);
+                    handleRemoveFromFolder(selectedDialogs);
                 } else if (id == pin || id == read || id == delete || id == clear || id == mute || id == archive || id == block || id == archive2 || id == pin2) {
                     performSelectedDialogsAction(selectedDialogs, id, true, false);
                 }
@@ -9745,7 +9656,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private void updateCounters(boolean hide) {
         int canClearHistoryCount = 0;
         int canDeleteCount = 0;
-        int canUnpinCount = 0;
+        canUnpinCount = 0;
         int canArchiveCount = 0;
         int communitiesCount = 0;
         canDeletePsaSelected = false;
@@ -10107,6 +10018,467 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         updateCounters(false);
         selectedDialogsCountTextView.setNumber(selectedDialogs.size(), updateAnimated);
+    }
+
+    public boolean isDialogSelected(long dialogId) {
+        return selectedDialogs != null && selectedDialogs.contains(dialogId);
+    }
+
+    public void addAccessibilityActionsForCell(DialogCell cell, AccessibilityNodeInfo info) {
+        if (cell == null || info == null) {
+            return;
+        }
+        if (cell.isFolderCell()) {
+            if (getMessagesStorage().getArchiveUnreadCount() != 0) {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_archive_mark_all_read,
+                    LocaleController.getString(R.string.MarkAllAsRead)
+                ));
+            }
+            if (SharedConfig.archiveHidden) {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_archive_pin,
+                    LocaleController.getString(R.string.PinInTheList)
+                ));
+            } else {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_archive_hide,
+                    LocaleController.getString(R.string.HideAboveTheList)
+                ));
+            }
+            return;
+        }
+
+        long dialogId = cell.getDialogId();
+        if (dialogId == 0) {
+            return;
+        }
+
+        final boolean inActionMode = actionBar != null && actionBar.isActionModeShowed();
+        final boolean isSelected = inActionMode && isDialogSelected(dialogId);
+
+        if (inActionMode) {
+            if (isSelected) {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_toggle_selection,
+                    LocaleController.getString(R.string.Deselect)
+                ));
+            } else {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_toggle_selection,
+                    LocaleController.getString(R.string.Select)
+                ));
+            }
+
+            if (isSelected && selectedDialogs.size() > 1) {
+                populateBulkAccessibilityActions(info);
+                return;
+            }
+        } else {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_toggle_selection,
+                LocaleController.getString(R.string.AccActionEnterSelectionMode)
+            ));
+        }
+
+        TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(dialogId);
+        long selfUserId = getUserConfig().getClientUserId();
+
+        if (!DialogObject.isEncryptedDialog(dialogId)) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_chat_preview,
+                LocaleController.getString(R.string.AccActionChatPreview)
+            ));
+        }
+
+        boolean isPinned = isDialogPinned(dialog);
+        if (isPinned) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_unpin,
+                LocaleController.getString(R.string.UnpinFromTop)
+            ));
+        } else if (communityId == 0 && !getMessagesController().isPromoDialog(dialogId, false)) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_pin,
+                LocaleController.getString(R.string.PinToTop)
+            ));
+        }
+
+        if (dialogId != selfUserId) {
+            boolean isMuted = getMessagesController().isDialogMuted(dialogId, 0);
+            if (isMuted) {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_unmute,
+                    LocaleController.getString(R.string.ChatsUnmute)
+                ));
+            } else {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_mute,
+                    LocaleController.getString(R.string.ChatsMute)
+                ));
+            }
+        }
+
+        if (cell.getHasUnread()) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_read,
+                LocaleController.getString(R.string.MarkAsRead)
+            ));
+        } else if (!cell.isDialogCommunity() && !getMessagesController().isForum(dialogId)) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_unread,
+                LocaleController.getString(R.string.MarkAsUnread)
+            ));
+        }
+
+        if (folderId == 1 || (dialog != null && dialog.folder_id == 1)) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_unarchive,
+                LocaleController.getString(R.string.Unarchive)
+            ));
+        } else if (dialogId != selfUserId && (dialog == null || dialog.community_id == 0) && dialogId != 777000 && !getMessagesController().isPromoDialog(dialogId, false) && communityId == 0) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_archive,
+                LocaleController.getString(R.string.Archive)
+            ));
+        }
+
+        boolean isPromo = getMessagesController().isPromoDialog(dialogId, true);
+        if (!isPromo || getMessagesController().promoDialogType == MessagesController.PROMO_TYPE_PSA) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_delete,
+                LocaleController.getString(R.string.Delete)
+            ));
+        }
+
+        if (!isPromo) {
+            boolean isChannelOrPublic = false;
+            if (DialogObject.isChannel(dialog)) {
+                TLRPC.Chat chat = getMessagesController().getChat(-dialogId);
+                isChannelOrPublic = chat != null && (!chat.megagroup || ChatObject.isPublic(chat));
+            } else if (DialogObject.isChatDialog(dialogId)) {
+                TLRPC.Chat chat = getMessagesController().getChat(-dialogId);
+                isChannelOrPublic = chat != null && ChatObject.isChannel(chat) && (!chat.megagroup || ChatObject.isPublic(chat));
+            }
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_clear,
+                LocaleController.getString(isChannelOrPublic ? R.string.ClearHistoryCache : R.string.ClearHistory)
+            ));
+        }
+
+        if (filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && !filterTabsView.currentTabIsDefault()) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_remove_from_folder,
+                LocaleController.getString(R.string.FilterRemoveFrom)
+            ));
+        }
+        if (communityId == 0 && getMessagesController().filtersEnabled && getMessagesController().dialogFilters != null && !getMessagesController().dialogFilters.isEmpty()) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_add_to_folder,
+                LocaleController.getString(R.string.FilterAddTo)
+            ));
+        }
+
+        if (DialogObject.isUserDialog(dialogId) && dialogId != selfUserId && dialogId != UserObject.VERIFY) {
+            TLRPC.User user = getMessagesController().getUser(dialogId);
+            if (user != null && !MessagesController.isSupportUser(user)) {
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                    R.id.acc_action_block,
+                    LocaleController.getString(R.string.BlockUser)
+                ));
+            }
+        }
+    }
+
+    private void populateBulkAccessibilityActions(AccessibilityNodeInfo info) {
+        if (deleteItem != null && deleteItem.getVisibility() == View.VISIBLE) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_delete,
+                LocaleController.getString(R.string.Delete)
+            ));
+        }
+        if (pinItem != null && (pinItem.getVisibility() == View.VISIBLE || (pin2Item != null && pin2Item.getVisibility() == View.VISIBLE))) {
+            boolean isUnpin = canUnpinCount > 0 && canPinCount == 0;
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                isUnpin ? R.id.acc_action_unpin : R.id.acc_action_pin,
+                LocaleController.getString(isUnpin ? R.string.UnpinFromTop : R.string.PinToTop)
+            ));
+        }
+        if (muteItem != null && muteItem.getVisibility() == View.VISIBLE) {
+            boolean isUnmute = canUnmuteCount != 0;
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                isUnmute ? R.id.acc_action_unmute : R.id.acc_action_mute,
+                LocaleController.getString(isUnmute ? R.string.ChatsUnmute : R.string.ChatsMute)
+            ));
+        }
+        if ((archiveItem != null && archiveItem.getVisibility() == View.VISIBLE) || (archive2Item != null && archive2Item.getVisibility() == View.VISIBLE)) {
+            boolean isUnarchive = canUnarchiveCount != 0;
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                isUnarchive ? R.id.acc_action_unarchive : R.id.acc_action_archive,
+                LocaleController.getString(isUnarchive ? R.string.Unarchive : R.string.Archive)
+            ));
+        }
+        if (readItem != null && readItem.getVisibility() == View.VISIBLE) {
+            boolean isRead = canReadCount != 0;
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                isRead ? R.id.acc_action_read : R.id.acc_action_unread,
+                LocaleController.getString(isRead ? R.string.MarkAsRead : R.string.MarkAsUnread)
+            ));
+        }
+        if (clearItem != null && clearItem.getVisibility() == View.VISIBLE) {
+            CharSequence clearText = clearItem.getTextView() != null ? clearItem.getTextView().getText() : null;
+            String clearTitle = !TextUtils.isEmpty(clearText) ? clearText.toString() : LocaleController.getString(R.string.ClearHistory);
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_clear,
+                clearTitle
+            ));
+        }
+        if (addToFolderItem != null && addToFolderItem.getVisibility() == View.VISIBLE) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_add_to_folder,
+                LocaleController.getString(R.string.FilterAddTo)
+            ));
+        }
+        if (removeFromFolderItem != null && removeFromFolderItem.getVisibility() == View.VISIBLE) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_remove_from_folder,
+                LocaleController.getString(R.string.FilterRemoveFrom)
+            ));
+        }
+        if (blockItem != null && blockItem.getVisibility() == View.VISIBLE) {
+            info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                R.id.acc_action_block,
+                LocaleController.getString(R.string.BlockUser)
+            ));
+        }
+    }
+
+    public boolean performAccessibilityActionForCell(DialogCell cell, int action) {
+        if (cell == null) {
+            return false;
+        }
+        if (cell.isFolderCell()) {
+            if (action == R.id.acc_action_archive_mark_all_read) {
+                getMessagesStorage().readAllDialogs(1);
+                return true;
+            } else if (action == R.id.acc_action_archive_pin || action == R.id.acc_action_archive_hide) {
+                if (viewPages != null && viewPages.length > 0 && viewPages[0] != null && viewPages[0].listView != null) {
+                    viewPages[0].listView.toggleArchiveHidden(true, cell);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        long dialogId = cell.getDialogId();
+        if (dialogId == 0) {
+            return false;
+        }
+
+        if (action == R.id.acc_action_toggle_selection) {
+            showOrUpdateActionMode(dialogId, cell);
+            return true;
+        }
+
+        if (action == R.id.acc_action_chat_preview) {
+            return showChatPreview(cell);
+        }
+
+        final boolean inActionMode = actionBar != null && actionBar.isActionModeShowed();
+        final boolean isSelected = inActionMode && isDialogSelected(dialogId);
+
+        if (isSelected && selectedDialogs.size() > 1) {
+            if (action == R.id.acc_action_delete) {
+                performSelectedDialogsAction(selectedDialogs, delete, true, false);
+                return true;
+            } else if (action == R.id.acc_action_pin || action == R.id.acc_action_unpin) {
+                performSelectedDialogsAction(selectedDialogs, pin, true, false);
+                return true;
+            } else if (action == R.id.acc_action_mute || action == R.id.acc_action_unmute) {
+                performSelectedDialogsAction(selectedDialogs, mute, true, false);
+                return true;
+            } else if (action == R.id.acc_action_archive || action == R.id.acc_action_unarchive) {
+                performSelectedDialogsAction(selectedDialogs, archive, true, false);
+                return true;
+            } else if (action == R.id.acc_action_read || action == R.id.acc_action_unread) {
+                performSelectedDialogsAction(selectedDialogs, read, true, false);
+                return true;
+            } else if (action == R.id.acc_action_clear) {
+                performSelectedDialogsAction(selectedDialogs, clear, true, false);
+                return true;
+            } else if (action == R.id.acc_action_add_to_folder) {
+                FiltersListBottomSheet sheet = new FiltersListBottomSheet(DialogsActivity.this, selectedDialogs);
+                sheet.setDelegate((filter, checked) -> handleAddToFolderDelegate(filter, checked, selectedDialogs));
+                showDialog(sheet);
+                return true;
+            } else if (action == R.id.acc_action_remove_from_folder) {
+                handleRemoveFromFolder(selectedDialogs);
+                return true;
+            } else if (action == R.id.acc_action_block) {
+                performSelectedDialogsAction(selectedDialogs, block, true, false);
+                return true;
+            }
+        }
+
+        // Single chat action execution
+        ArrayList<Long> singleList = new ArrayList<>();
+        singleList.add(dialogId);
+
+        if (action == R.id.acc_action_delete) {
+            performSelectedDialogsAction(singleList, delete, true, false);
+            return true;
+        } else if (action == R.id.acc_action_clear) {
+            performSelectedDialogsAction(singleList, clear, true, false);
+            return true;
+        } else if (action == R.id.acc_action_pin || action == R.id.acc_action_unpin) {
+            canPinCount = action == R.id.acc_action_pin ? 1 : 0;
+            performSelectedDialogsAction(singleList, pin, true, false);
+            return true;
+        } else if (action == R.id.acc_action_mute) {
+            showDialog(AlertsCreator.createMuteAlert(this, dialogId, 0, null));
+            return true;
+        } else if (action == R.id.acc_action_unmute) {
+            getNotificationsController().setDialogNotificationsSettings(dialogId, 0, NotificationsController.SETTING_MUTE_UNMUTE);
+            BulletinFactory.createMuteBulletin(this, false, null).show();
+            return true;
+        } else if (action == R.id.acc_action_read) {
+            markAsRead(dialogId);
+            return true;
+        } else if (action == R.id.acc_action_unread) {
+            markAsUnread(dialogId);
+            return true;
+        } else if (action == R.id.acc_action_archive) {
+            getMessagesController().addDialogToFolder(singleList, 1, -1, null, 0);
+            UndoView undoView = getUndoView();
+            if (undoView != null) {
+                undoView.showWithAction(0, UndoView.ACTION_ARCHIVE, null, () -> getMessagesController().addDialogToFolder(singleList, folderId == 0 && communityId == 0 ? 0 : 1, -1, null, 0));
+            }
+            return true;
+        } else if (action == R.id.acc_action_unarchive) {
+            getMessagesController().addDialogToFolder(singleList, 0, -1, null, 0);
+            return true;
+        } else if (action == R.id.acc_action_add_to_folder) {
+            FiltersListBottomSheet sheet = new FiltersListBottomSheet(DialogsActivity.this, singleList);
+            sheet.setDelegate((filter, checked) -> handleAddToFolderDelegate(filter, checked, singleList));
+            showDialog(sheet);
+            return true;
+        } else if (action == R.id.acc_action_remove_from_folder) {
+            handleRemoveFromFolder(singleList);
+            return true;
+        } else if (action == R.id.acc_action_block) {
+            performSelectedDialogsAction(singleList, block, true, false);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void handleAddToFolderDelegate(MessagesController.DialogFilter filter, boolean checked, ArrayList<Long> dialogs) {
+        ArrayList<Long> alwaysShow = FiltersListBottomSheet.getDialogsCount(DialogsActivity.this, filter, dialogs, true, false);
+        if (!checked) {
+            int currentCount;
+            if (filter != null) {
+                currentCount = filter.alwaysShow.size();
+            } else {
+                currentCount = 0;
+            }
+            int totalCount = currentCount + alwaysShow.size();
+            if ((totalCount > getMessagesController().dialogFiltersChatsLimitDefault && !getUserConfig().isPremium()) || totalCount > getMessagesController().dialogFiltersChatsLimitPremium) {
+                Context context = getContext() != null ? getContext() : (fragmentView != null ? fragmentView.getContext() : getParentActivity());
+                if (context != null) {
+                    showDialog(new LimitReachedBottomSheet(DialogsActivity.this, context, LimitReachedBottomSheet.TYPE_CHATS_IN_FOLDER, currentAccount, null));
+                }
+                return;
+            }
+        }
+        if (filter != null) {
+            if (checked) {
+                for (int a = 0; a < dialogs.size(); a++) {
+                    filter.neverShow.add(dialogs.get(a));
+                    filter.alwaysShow.remove(dialogs.get(a));
+                }
+                FilterCreateActivity.saveFilterToServer(filter, filter.flags, filter.name, filter.entities, filter.title_noanimate, filter.color, filter.alwaysShow, filter.neverShow, filter.pinnedDialogs, false, false, true, true, false, DialogsActivity.this, null);
+                long did;
+                if (dialogs.size() == 1) {
+                    did = dialogs.get(0);
+                } else {
+                    did = 0;
+                }
+                final UndoView undoView = getUndoView();
+                if (undoView != null) {
+                    undoView.showWithAction(did, UndoView.ACTION_REMOVED_FROM_FOLDER, dialogs.size(), filter, null, null);
+                }
+            } else {
+                if (!alwaysShow.isEmpty()) {
+                    for (int a = 0; a < alwaysShow.size(); a++) {
+                        filter.neverShow.remove(alwaysShow.get(a));
+                    }
+                    filter.alwaysShow.addAll(alwaysShow);
+                    FilterCreateActivity.saveFilterToServer(filter, filter.flags, filter.name, filter.entities, filter.title_noanimate, filter.color, filter.alwaysShow, filter.neverShow, filter.pinnedDialogs, false, false, true, true, false, DialogsActivity.this, null);
+                }
+                long did;
+                if (alwaysShow.size() == 1) {
+                    did = alwaysShow.get(0);
+                } else {
+                    did = 0;
+                }
+                final UndoView undoView = getUndoView();
+                if (undoView != null) {
+                    undoView.showWithAction(did, UndoView.ACTION_ADDED_TO_FOLDER, alwaysShow.size(), filter, null, null);
+                }
+            }
+        } else {
+            presentFragment(new FilterCreateActivity(null, alwaysShow));
+        }
+        if (actionBar != null && actionBar.isActionModeShowed()) {
+            hideActionMode(true);
+        }
+    }
+
+    private void handleRemoveFromFolder(ArrayList<Long> dialogs) {
+        if (viewPages == null || viewPages.length == 0 || viewPages[0] == null) {
+            return;
+        }
+        MessagesController.DialogFilter filter = getMessagesController().getDialogFilters().get(viewPages[0].selectedType);
+        ArrayList<Long> neverShow = FiltersListBottomSheet.getDialogsCount(DialogsActivity.this, filter, dialogs, false, false);
+
+        int currentCount;
+        if (filter != null) {
+            currentCount = filter.neverShow.size();
+        } else {
+            currentCount = 0;
+        }
+        if (currentCount + neverShow.size() > 100) {
+            if (getParentActivity() != null) {
+                showDialog(AlertsCreator.createSimpleAlert(getParentActivity(), LocaleController.getString(R.string.FilterAddToAlertFullTitle), LocaleController.getString(R.string.FilterAddToAlertFullText)).create());
+            }
+            return;
+        }
+        if (!neverShow.isEmpty()) {
+            filter.neverShow.addAll(neverShow);
+            for (int a = 0; a < neverShow.size(); a++) {
+                Long did = neverShow.get(a);
+                filter.alwaysShow.remove(did);
+                filter.pinnedDialogs.delete(did);
+            }
+            if (filter.isChatlist()) {
+                filter.neverShow.clear();
+            }
+            FilterCreateActivity.saveFilterToServer(filter, filter.flags, filter.name, filter.entities, filter.title_noanimate, filter.color, filter.alwaysShow, filter.neverShow, filter.pinnedDialogs, false, false, true, false, false, DialogsActivity.this, null);
+        }
+        long did;
+        if (neverShow.size() == 1) {
+            did = neverShow.get(0);
+        } else {
+            did = 0;
+        }
+        final UndoView undoView = getUndoView();
+        if (undoView != null) {
+            undoView.showWithAction(did, UndoView.ACTION_REMOVED_FROM_FOLDER, neverShow.size(), filter, null, null);
+        }
+        if (actionBar != null && actionBar.isActionModeShowed()) {
+            hideActionMode(false);
+        }
     }
 
     private void closeSearch() {
