@@ -61,8 +61,8 @@ jobs:
 
           if ($type -eq 'stable') {
             if (-not $ver) { Write-Error "ERROR: 'Version' is required for Stable releases."; exit 1 }
-            if (-not $msg) { Write-Error "ERROR: 'Release Message' is required for Stable releases."; exit 1 }
-            if (-not $news) { Write-Error "ERROR: 'Whats New' is required for Stable releases."; exit 1 }
+            if (-not $msg) { Write-Host "Notice: 'Release Message' not specified; will fallback to default." }
+            if (-not $news) { Write-Host "Notice: 'Whats New' not specified; will fallback to default." }
           } else {
             Write-Host "Beta release selected. Skipping strict input validation."
           }
@@ -129,25 +129,29 @@ jobs:
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
           echo "VERSION_CODE=$versionCode" >> $env:GITHUB_OUTPUT
           echo "APK_VERSION_CODE=$apkVersionCode" >> $env:GITHUB_OUTPUT
-          echo "RELEASE_TAG=v$version" >> $env:GITHUB_OUTPUT
+          $relTag = if ($version -match "^v") { $version } else { "v$version" }
+          echo "RELEASE_TAG=$relTag" >> $env:GITHUB_OUTPUT
 
-      - name: Bump Version Files and Commit (Stable only)
-        if: ${{ github.event.inputs.release_type == 'stable' }}
+      - name: Bump Version Files and Commit
         shell: pwsh
         run: |
           $ver = "${{ steps.get_version.outputs.VERSION }}"
           $code = "${{ steps.get_version.outputs.VERSION_CODE }}"
+          $relType = "${{ github.event.inputs.release_type }}"
 
           if (Test-Path "gradle.properties") {
             $p = [System.IO.File]::ReadAllText("gradle.properties", [System.Text.Encoding]::UTF8)
-            $p = $p -replace '(?m)^APP_VERSION_NAME\s*=.*', "APP_VERSION_NAME=$ver"
+            if ($relType -eq 'stable') {
+              $p = $p -replace '(?m)^APP_VERSION_NAME\s*=.*', "APP_VERSION_NAME=$ver"
+            }
             $p = $p -replace '(?m)^APP_VERSION_CODE\s*=.*', "APP_VERSION_CODE=$code"
             [System.IO.File]::WriteAllText("gradle.properties", $p, [System.Text.UTF8Encoding]::new($false))
 
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add gradle.properties
-            git commit -m "bumping version"
+            git commit -m "bumping version to $ver ($code)"
+            git pull --rebase origin HEAD
             git push origin HEAD:${{ github.ref }}
           }
 
@@ -346,9 +350,13 @@ jobs:
           WHATS_NEW: ${{ github.event.inputs.whats_new }}
         run: |
           $ver = "${{ steps.get_version.outputs.VERSION }}"
-          $tag = "v$ver"
+          $tag = if ($ver -match "^v") { $ver } else { "v$ver" }
 
-          $env:RELEASE_MESSAGE | Set-Content -Path "release_notes.txt" -Encoding utf8
+          $msg = $env:RELEASE_MESSAGE
+          if (-not $msg) { $msg = $env:WHATS_NEW }
+          if (-not $msg) { $msg = "Release $ver" }
+
+          $msg | Set-Content -Path "release_notes.txt" -Encoding utf8
 
           gh release create $tag "release_assets/Gramable.apk" "release_assets/Gramable-$ver.apk" `
             --title "Version $ver" `
@@ -367,7 +375,7 @@ jobs:
           $apkCode = [int]"${{ steps.get_version.outputs.APK_VERSION_CODE }}"
           $relType = "${{ github.event.inputs.release_type }}"
 
-          $tag = if ($relType -eq "stable") { "v$ver" } else { "beta" }
+          $tag = if ($relType -eq "stable") { if ($ver -match "^v") { $ver } else { "v$ver" } } else { "beta" }
           $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/Gramable.apk"
 
           $news = $env:WHATS_NEW
@@ -391,6 +399,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add update.json
           git commit -m "pushing update"
+          git pull --rebase origin HEAD
           git push origin HEAD:${{ github.ref }}
 
       - name: Upload Build Artifacts

@@ -216,8 +216,8 @@
     <string name="NotificationGroupFew">%1$s ha inviato %3$s nel gruppo %2$s</string>
     <string name="NotificationGroupAlbum">%1$s ha inviato un album nel gruppo %2$s</string>
     <string name="NotificationGroupForwardedFew">%1$s ha inoltrato %3$s nel gruppo %2$s</string>
-    <string name="NotificationHiddenName">Telegram</string>
-    <string name="NotificationHiddenChatName">Telegram</string>
+    <string name="NotificationHiddenName">Gramable</string>
+    <string name="NotificationHiddenChatName">Gramable</string>
     <string name="NotificationHiddenChatUserName">Utente</string>
     <string name="NotificationHiddenMessage">Nuovo messaggio</string>
     <string name="Reply">Rispondi</string>
@@ -281,7 +281,7 @@
     <string name="NotificationActionPinnedGeoLiveUser">%1$s ha fissato una posizione in tempo reale</string>
     <string name="NotificationActionPinnedGifUser">%1$s ha fissato una GIF</string>
     <string name="NotificationActionPinnedMusicUser">%1$s ha fissato un file audio</string>
-    <string name="SecretChatName">Telegram</string>
+    <string name="SecretChatName">Gramable</string>
     <!--usernames-->
     <string name="Username">Username</string>
     <string name="UsernameAlso">e %1$s</string>
@@ -588,7 +588,7 @@
     <string name="DirectShareInfo">Mostra le chat recenti nel menu di condivisione</string>
     <string name="Emoji">Emoji</string>
     <string name="LargeEmoji">Emoji grandi</string>
-    <string name="TelegramVersion">Telegram per Android %1$s</string>
+    <string name="TelegramVersion">Gramable per Android %1$s</string>
     <string name="DebugMenu">Menu debug</string>
     <string name="DebugMenuLongPress">Tieni premuto di nuovo per il menu di debug</string>
     <string name="DebugSendLogs">Invia i log</string>
@@ -721,7 +721,7 @@
     <string name="AuthAnotherClientUrl">Questo codice può essere usato per consentire a qualcuno di accedere al tuo account Telegram.\n\nPer confermare l\'accesso a Telegram, vai in Impostazioni &gt; Dispositivi &gt; Scansiona QR e scansiona il codice.</string>
     <string name="QRCodePermissionNoCameraWithHint">**Telegram** deve accedere alla tua fotocamera per poter scansionare i codici QR. Tocca Impostazioni &gt; Permessi, e attiva **Fotocamera**.</string>
     <string name="SetProfilePhoto">Imposta foto del profilo</string>
-    <string name="AppUpdate">Aggiorna Telegram</string>
+    <string name="AppUpdate">Aggiorna Gramable</string>
     <string name="AppUpdateVersionAndSize">Versione %1$s • %2$s</string>
     <string name="AppUpdateDownloading">Download... %1$d%%</string>
     <string name="AppUpdateNow">Aggiorna ora</string>
@@ -1325,8 +1325,8 @@
     <string name="DeleteAll">Elimina tutto</string>
     <string name="StopLoadingTitle">Interrompere il caricamento?</string>
     <string name="StopLoading">Vuoi terminare il caricamento?</string>
-    <string name="UpdateTelegram">Aggiorna Telegram</string>
-    <string name="UpdateAppAlert">Spiacenti, la tua app Telegram è obsoleta e non può gestire la richiesta. Per favore aggiorna Telegram.</string>
+    <string name="UpdateTelegram">Aggiorna Gramable</string>
+    <string name="UpdateAppAlert">Spiacenti, la tua app Gramable è obsoleta e non può gestire la richiesta. Per favore aggiorna Gramable.</string>
     <string name="InvalidPhoneNumber">Numero di telefono non valido. Per favore controlla il numero e riprova.</string>
     <string name="PleaseLoginPassport">Per favore accedi al tuo account Telegram per usare Telegram Passport.</string>
     <string name="BannedPhoneNumber">Questo numero è bloccato.</string>

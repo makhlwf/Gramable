@@ -47,7 +47,8 @@ public class BetaUpdaterController {
         path = prefs.getString("path", null);
         lastCheck = prefs.getLong("lastCheck", 0L);
 
-        if (getCurrentVersionCode() >= versionCode || !TextUtils.isEmpty(path) && !new File(path).exists()) {
+        boolean isCurrentInstalledHigher = getCurrentVersionCode() > versionCode || (getCurrentVersionCode() == versionCode && !SharedConfig.versionBigger(version, getCurrentVersion()));
+        if (isCurrentInstalledHigher || !TextUtils.isEmpty(path) && !new File(path).exists()) {
             version = null;
             versionCode = 0;
             path = null;
@@ -119,6 +120,12 @@ public class BetaUpdaterController {
         new HttpGetTask(str -> AndroidUtilities.runOnUIThread(() -> {
             checkingForUpdate = false;
             try {
+                if (TextUtils.isEmpty(str)) {
+                    if (whenDone != null) {
+                        whenDone.run();
+                    }
+                    return;
+                }
                 final JSONObject json = new JSONObject(str);
                 final String newVersion = json.getString("version");
                 final int newVersionCode = json.optInt("version_code", 0);
@@ -132,14 +139,18 @@ public class BetaUpdaterController {
                 }
 
                 final int oldVersionCode = this.versionCode;
+                final String oldVersion = this.version;
 
-                boolean isNewer = (newVersionCode > 0 && newVersionCode > getCurrentVersionCode())
-                        || (newVersionCode <= 0 && !TextUtils.isEmpty(newVersion) && !newVersion.equals(getCurrentVersion()) && SharedConfig.versionBiggerOrEqual(newVersion, getCurrentVersion()));
+                boolean isNewerThanCurrent = (newVersionCode > 0 && newVersionCode > getCurrentVersionCode())
+                        || (newVersionCode == getCurrentVersionCode() && !TextUtils.isEmpty(newVersion) && !newVersion.equalsIgnoreCase(getCurrentVersion()) && SharedConfig.versionBigger(newVersion, getCurrentVersion()))
+                        || (newVersionCode <= 0 && !TextUtils.isEmpty(newVersion) && !newVersion.equalsIgnoreCase(getCurrentVersion()) && SharedConfig.versionBigger(newVersion, getCurrentVersion()));
 
-                if (
-                    (version == null || (newVersionCode > 0 ? (newVersionCode > versionCode) : SharedConfig.versionBiggerOrEqual(newVersion, version))) &&
-                    isNewer
-                ) { // received newer version
+                boolean isNewerThanPending = version == null
+                        || (newVersionCode > 0 && newVersionCode > versionCode)
+                        || (newVersionCode == versionCode && !TextUtils.isEmpty(newVersion) && !newVersion.equalsIgnoreCase(version) && SharedConfig.versionBigger(newVersion, version))
+                        || (newVersionCode <= 0 && !TextUtils.isEmpty(newVersion) && !newVersion.equalsIgnoreCase(version) && SharedConfig.versionBigger(newVersion, version));
+
+                if (isNewerThanCurrent && isNewerThanPending) { // received newer version
                     if (!TextUtils.isEmpty(path)) {
                         final File file = new File(path);
                         try {
@@ -154,11 +165,11 @@ public class BetaUpdaterController {
                     this.fileUrl = fileUrl;
                     this.changelog = changelog;
                 } else if (
-                    version != null && versionCode != 0 && SharedConfig.versionBiggerOrEqual(version, newVersion) && versionCode == newVersionCode
+                    version != null && versionCode == newVersionCode && TextUtils.equals(version, newVersion)
                 ) { // received the same version
                     this.fileUrl = fileUrl;
                     this.changelog = changelog;
-                } else { // received lower version: remove update
+                } else if (!isNewerThanCurrent) { // received lower or equal version to current installed: remove update
                     if (!TextUtils.isEmpty(path)) {
                         final File file = new File(path);
                         try {
@@ -168,25 +179,17 @@ public class BetaUpdaterController {
                         }
                     }
                     path = null;
-                    if (SharedConfig.versionBiggerOrEqual(getCurrentVersion(), newVersion) && getCurrentVersionCode() < newVersionCode) {
-                        // remote version is still newer than current installed, even though local downloaded was higher
-                        version = newVersion;
-                        versionCode = newVersionCode;
-                        this.fileUrl = fileUrl;
-                        this.changelog = changelog;
-                    } else {
-                        // remove version is the same or less than current installed
-                        version = null;
-                        versionCode = 0;
-                        this.fileUrl = null;
-                        this.changelog = null;
-                    }
+                    version = null;
+                    versionCode = 0;
+                    this.fileUrl = null;
+                    this.changelog = null;
                 }
 
                 this.lastCheck = System.currentTimeMillis();
                 save();
 
-                if (this.versionCode != oldVersionCode) {
+                boolean versionChanged = (this.versionCode != oldVersionCode) || !TextUtils.equals(this.version, oldVersion);
+                if (versionChanged) {
                     NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateAvailable);
                 }
 
@@ -194,7 +197,7 @@ public class BetaUpdaterController {
                 AndroidUtilities.runOnUIThread(this.scheduledUpdateCheck, BuildVars.DEBUG_PRIVATE_VERSION ? CHECK_INTERVAL_PRIVATE : CHECK_INTERVAL);
                 if (whenDone != null) {
                     whenDone.run();
-                } else if (this.versionCode != oldVersionCode && !ApplicationLoader.mainInterfacePaused) {
+                } else if (versionChanged && !ApplicationLoader.mainInterfacePaused) {
                     final Context context = LaunchActivity.instance != null ? LaunchActivity.instance : ApplicationLoader.applicationContext;
                     final BetaUpdate pendingUpdate = getUpdate();
                     if (context != null && pendingUpdate != null) {
@@ -203,6 +206,9 @@ public class BetaUpdaterController {
                 }
             } catch (Exception e) {
                 FileLog.e("Failed to check for beta update at " + url + " received: " + str, e);
+                if (whenDone != null) {
+                    whenDone.run();
+                }
             }
         })).execute(url);
     }

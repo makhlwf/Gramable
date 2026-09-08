@@ -290,7 +290,7 @@ task checkVisibility {
     }
     doLast {
         if (project.gradle.startParameter.taskNames.find { it.contains("HA_public") }) {
-            def privateBuild = file("${projectDir}_AppHockeyApp/afat/HA_private/Telegram-Beta.apk")
+            def privateBuild = file("${projectDir}_AppHockeyApp/afat/HA_private/Gramable-Beta.apk")
             if (privateBuild.exists()) {
                 privateBuild.delete()
             }

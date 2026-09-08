@@ -180,8 +180,8 @@
     <string name="NotificationGroupFew">%1$s hat %3$s an die Gruppe %2$s gesendet</string>
     <string name="NotificationGroupAlbum">%1$s hat ein Album an die Gruppe %2$s gesendet</string>
     <string name="NotificationGroupForwardedFew">%1$s hat %3$s an die Gruppe %2$s weitergeleitet</string>
-    <string name="NotificationHiddenName">Telegram</string>
-    <string name="NotificationHiddenChatName">Telegram</string>
+    <string name="NotificationHiddenName">Gramable</string>
+    <string name="NotificationHiddenChatName">Gramable</string>
     <string name="NotificationHiddenChatUserName">Nutzer</string>
     <string name="NotificationHiddenMessage">Neue Nachricht</string>
     <string name="Reply">Antworten</string>
@@ -245,7 +245,7 @@
     <string name="NotificationActionPinnedGeoLiveUser">%1$s hat einen Live-Standort angeheftet</string>
     <string name="NotificationActionPinnedGifUser">%1$s hat ein GIF angeheftet</string>
     <string name="NotificationActionPinnedMusicUser">%1$s hat eine Audiodatei angeheftet</string>
-    <string name="SecretChatName">Telegram</string>
+    <string name="SecretChatName">Gramable</string>
     <!--settings view-->
     <string name="ResetNotificationsText">Einstellungen wurden zurückgesetzt</string>
     <string name="ResetNotificationsAlertTitle">Benachrichtigungen zurücksetzen</string>
@@ -534,7 +534,7 @@
     <string name="DirectShareInfo">Letzte Chats im Teilen-Menü anzeigen</string>
     <string name="Emoji">Emoji</string>
     <string name="LargeEmoji">Große Emoji</string>
-    <string name="TelegramVersion">Telegram für Android %1$s</string>
+    <string name="TelegramVersion">Gramable für Android %1$s</string>
     <string name="ChangeLanguageLater">Du kannst deine Sprache später in den Einstellungen ändern.</string>
     <string name="ChooseYourLanguage">Wähle deine Sprache</string>
     <string name="ChooseYourLanguageOther">Weitere</string>
@@ -644,7 +644,7 @@
     <string name="AuthAnotherClientUrl">Mit diesem Code kann man sich bei deinem Telegram Konto anmelden.\n\nUm die Anmeldung zu bestätigen, in die Einstellungen von Telegram wechseln &gt; Geräte &gt; QR-Code scannen und den Code mit der Kamera scannen.</string>
     <string name="QRCodePermissionNoCameraWithHint">**Telegram** benötigt Zugriff auf deine **Kamera**, damit du QR-Codes scannen kannst. Tippe unten auf Einstellungen &gt; Berechtigungen und aktiviere den Zugriff.</string>
     <string name="SetProfilePhoto">Profilbild festlegen</string>
-    <string name="AppUpdate">Telegram aktualisieren</string>
+    <string name="AppUpdate">Gramable aktualisieren</string>
     <string name="AppUpdateVersionAndSize">Version %1$s • %2$s</string>
     <string name="AppUpdateDownloading">%1$d%% wird geladen...</string>
     <string name="AppUpdateNow">Jetzt aktualisieren</string>
@@ -1164,8 +1164,8 @@
     <string name="DeleteAll">Alles löschen</string>
     <string name="StopLoadingTitle">Laden stoppen?</string>
     <string name="StopLoading">Ladevorgang wirklich abbrechen?</string>
-    <string name="UpdateTelegram">Aktualisiere Telegram</string>
-    <string name="UpdateAppAlert">Deine Telegram-App ist leider veraltet und kann diese Anfrage nicht verarbeiten. Bitte aktualisiere Telegram.</string>
+    <string name="UpdateTelegram">Aktualisiere Gramable</string>
+    <string name="UpdateAppAlert">Deine Gramable-App ist leider veraltet und kann diese Anfrage nicht verarbeiten. Bitte aktualisiere Gramable.</string>
     <string name="InvalidPhoneNumber">Ungültige Telefonnummer. Bitte prüfe, ob du sie richtig eingetippt hast und versuche es erneut.</string>
     <string name="PleaseLoginPassport">Bitte melde dich mit deinem Telegram-Konto an, um Telegram Passport nutzen zu können.</string>
     <string name="BannedPhoneNumber">Diese Nummer wurde gesperrt.</string>

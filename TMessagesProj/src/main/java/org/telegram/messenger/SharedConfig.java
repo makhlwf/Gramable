@@ -49,6 +49,8 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class SharedConfig {
     /**
@@ -807,21 +809,129 @@ public class SharedConfig {
         return true;
     }
 
+    public static boolean versionBigger(String a, String b) {
+        return compareVersions(a, b) > 0;
+    }
+
     // returns a >= b
     public static boolean versionBiggerOrEqual(String a, String b) {
-        String[] partsA = a.split("\\.");
-        String[] partsB = b.split("\\.");
-        for (int i = 0; i < Math.min(partsA.length, partsB.length); ++i) {
-            int numA = Integer.parseInt(partsA[i]);
-            int numB = Integer.parseInt(partsB[i]);
-            if (numA < numB) {
-                return false;
-            } else if (numA > numB) {
-                return true;
+        return compareVersions(a, b) >= 0;
+    }
+
+    public static int compareVersions(String a, String b) {
+        if (a == null && b == null) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+
+        a = a.trim();
+        b = b.trim();
+        if (a.equalsIgnoreCase(b)) return 0;
+
+        if (a.startsWith("v") || a.startsWith("V")) a = a.substring(1).trim();
+        if (b.startsWith("v") || b.startsWith("V")) b = b.substring(1).trim();
+        if (a.equalsIgnoreCase(b)) return 0;
+
+        Pattern gtPattern = Pattern.compile("(?i)^G(.*?)T(.*)$");
+        Matcher ma = gtPattern.matcher(a);
+        Matcher mb = gtPattern.matcher(b);
+
+        if (ma.matches() && mb.matches()) {
+            int cmpG = compareVersionTokens(tokenizeVersion(ma.group(1)), tokenizeVersion(mb.group(1)));
+            if (cmpG != 0) return cmpG;
+            return compareVersionTokens(tokenizeVersion(ma.group(2)), tokenizeVersion(mb.group(2)));
+        } else if (ma.matches() && !mb.matches()) {
+            return 1;
+        } else if (!ma.matches() && mb.matches()) {
+            return -1;
+        }
+
+        return compareVersionTokens(tokenizeVersion(a), tokenizeVersion(b));
+    }
+
+    private static class VersionToken {
+        final boolean isNumber;
+        final long num;
+        final String str;
+
+        VersionToken(long num) {
+            this.isNumber = true;
+            this.num = num;
+            this.str = null;
+        }
+
+        VersionToken(String str) {
+            this.isNumber = false;
+            this.num = 0;
+            this.str = str.toLowerCase(Locale.US);
+        }
+    }
+
+    private static List<VersionToken> tokenizeVersion(String v) {
+        List<VersionToken> tokens = new ArrayList<>();
+        if (v == null) return tokens;
+        Matcher m = Pattern.compile("([0-9]+|[a-zA-Z]+)").matcher(v);
+        while (m.find()) {
+            String part = m.group(1);
+            if (Character.isDigit(part.charAt(0))) {
+                try {
+                    tokens.add(new VersionToken(Long.parseLong(part)));
+                } catch (Exception e) {
+                    tokens.add(new VersionToken(part));
+                }
+            } else {
+                tokens.add(new VersionToken(part));
             }
         }
-        return true;
+        return tokens;
     }
+
+    private static int compareVersionTokens(List<VersionToken> tokensA, List<VersionToken> tokensB) {
+        int max = Math.max(tokensA.size(), tokensB.size());
+        for (int i = 0; i < max; i++) {
+            VersionToken tA = i < tokensA.size() ? tokensA.get(i) : null;
+            VersionToken tB = i < tokensB.size() ? tokensB.get(i) : null;
+
+            if (tA == null && tB != null) {
+                if (!tB.isNumber && isPrereleaseQualifier(tB.str)) {
+                    return 1;
+                }
+                return -1;
+            }
+            if (tA != null && tB == null) {
+                if (!tA.isNumber && isPrereleaseQualifier(tA.str)) {
+                    return -1;
+                }
+                return 1;
+            }
+
+            if (tA.isNumber && tB.isNumber) {
+                if (tA.num != tB.num) {
+                    return Long.compare(tA.num, tB.num);
+                }
+            } else if (tA.isNumber && !tB.isNumber) {
+                if (isPrereleaseQualifier(tB.str)) {
+                    return 1;
+                }
+                return 1;
+            } else if (!tA.isNumber && tB.isNumber) {
+                if (isPrereleaseQualifier(tA.str)) {
+                    return -1;
+                }
+                return -1;
+            } else {
+                int cmp = tA.str.compareTo(tB.str);
+                if (cmp != 0) return cmp;
+            }
+        }
+        return 0;
+    }
+
+    private static boolean isPrereleaseQualifier(String s) {
+        if (s == null) return false;
+        String l = s.toLowerCase(Locale.US);
+        return l.contains("beta") || l.contains("alpha") || l.contains("rc") || l.contains("dev") || l.contains("preview");
+    }
+
 
     public static boolean checkPasscode(String passcode) {
         if (passcodeSalt.length == 0) {

@@ -216,8 +216,8 @@
     <string name="NotificationGroupFew">%1$s heeft %3$s naar de groep %2$s gestuurd</string>
     <string name="NotificationGroupAlbum">%1$s heeft een album naar de groep %2$s gestuurd</string>
     <string name="NotificationGroupForwardedFew">%1$s heeft %3$s naar de groep %2$s doorgestuurd</string>
-    <string name="NotificationHiddenName">Telegram</string>
-    <string name="NotificationHiddenChatName">Telegram</string>
+    <string name="NotificationHiddenName">Gramable</string>
+    <string name="NotificationHiddenChatName">Gramable</string>
     <string name="NotificationHiddenChatUserName">Gebruiker</string>
     <string name="NotificationHiddenMessage">Nieuw bericht</string>
     <string name="Reply">Antwoorden</string>
@@ -281,7 +281,7 @@
     <string name="NotificationActionPinnedGeoLiveUser">\n%1$s zette een Live-locatie vast</string>
     <string name="NotificationActionPinnedGifUser">\n%1$s zette een GIF vast</string>
     <string name="NotificationActionPinnedMusicUser">\n%1$s zette een audiobestand vast</string>
-    <string name="SecretChatName">Telegram</string>
+    <string name="SecretChatName">Gramable</string>
     <!--usernames-->
     <string name="Username">Gebruikersnaam</string>
     <string name="UsernameAlso">ook %1$s</string>
@@ -589,7 +589,7 @@
     <string name="DirectShareInfo">Recente chats in snel delen weergeven</string>
     <string name="Emoji">Emoji</string>
     <string name="LargeEmoji">Grote emoji</string>
-    <string name="TelegramVersion">Telegram voor Android %1$s</string>
+    <string name="TelegramVersion">Gramable voor Android %1$s</string>
     <string name="ChangeLanguageLater">Via instellingen kun je je taal altijd aanpassen.</string>
     <string name="ChooseYourLanguage">Kies je taal</string>
     <string name="ChooseYourLanguageOther">Overige</string>
@@ -872,8 +872,8 @@
     <string name="DeleteAll">Alles verwijderen</string>
     <string name="StopLoadingTitle">Stoppen met laden?</string>
     <string name="StopLoading">Stoppen met laden?</string>
-    <string name="UpdateTelegram">Telegram bijwerken</string>
-    <string name="UpdateAppAlert">Je gebruikt een verouderde versie van Telegram, deze kan dit verzoek niet verwerken. Werk Telegram bij.</string>
+    <string name="UpdateTelegram">Gramable bijwerken</string>
+    <string name="UpdateAppAlert">Je gebruikt een verouderde versie van Gramable, deze kan dit verzoek niet verwerken. Werk Gramable bij.</string>
     <string name="InvalidPhoneNumber">Ongeldig telefoonnummer, controleer het nummer en probeer opnieuw.</string>
     <string name="PleaseLoginPassport">Log in op Telegram om Telegram Passport te gebruiken.</string>
     <string name="BannedPhoneNumber">Dit nummer is geblokkeerd.</string>

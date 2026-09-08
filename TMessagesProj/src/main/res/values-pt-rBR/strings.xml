@@ -180,8 +180,8 @@
     <string name="NotificationGroupFew">%1$s enviou %3$s ao grupo %2$s</string>
     <string name="NotificationGroupAlbum">%1$s enviou um álbum para o grupo %2$s</string>
     <string name="NotificationGroupForwardedFew">%1$s encaminhou %3$s ao grupo %2$s</string>
-    <string name="NotificationHiddenName">Telegram</string>
-    <string name="NotificationHiddenChatName">Telegram</string>
+    <string name="NotificationHiddenName">Gramable</string>
+    <string name="NotificationHiddenChatName">Gramable</string>
     <string name="NotificationHiddenChatUserName">Usuário</string>
     <string name="NotificationHiddenMessage">Nova mensagem</string>
     <string name="Reply">Responder</string>
@@ -245,7 +245,7 @@
     <string name="NotificationActionPinnedGeoLiveUser">%1$s fixou uma localização ao vivo</string>
     <string name="NotificationActionPinnedGifUser">%1$s fixou um GIF</string>
     <string name="NotificationActionPinnedMusicUser">%1$s fixou um arquivo de áudio</string>
-    <string name="SecretChatName">Telegram</string>
+    <string name="SecretChatName">Gramable</string>
     <!--contacts view-->
     <string name="SelectContact">Selecione um Contato</string>
     <string name="ShareContactTitle">Compartilhar Contato</string>
@@ -576,7 +576,7 @@
     <string name="DirectShareInfo">Mostra chats recentes no menu compartilhar.</string>
     <string name="Emoji">Emoji</string>
     <string name="LargeEmoji">Emoji Grande</string>
-    <string name="TelegramVersion">Telegram para Android %1$s</string>
+    <string name="TelegramVersion">Gramable para Android %1$s</string>
     <string name="DebugMenu">Menu de Depuração</string>
     <string name="DebugMenuLongPress">Segure de novo para ver o menu de depuração</string>
     <string name="DebugSendLogs">Enviar Logs</string>
@@ -709,7 +709,7 @@
     <string name="AuthAnotherClientUrl">Esse código pode ser usado para permitir que alguém entre na sua conta do Telegram.\n\nPara confirmar o login no Telegram, acesse Configurações &gt; Dispositivos &gt; Ler Código QR e escaneie o código.</string>
     <string name="QRCodePermissionNoCameraWithHint">O **Telegram** precisa de acesso à câmera para você escanear Códigos QR. Toque em Configurações &gt; Permissões, e ative a **Câmera**.</string>
     <string name="SetProfilePhoto">Definir Foto do Perfil</string>
-    <string name="AppUpdate">Atualizar o Telegram</string>
+    <string name="AppUpdate">Atualizar o Gramable</string>
     <string name="AppUpdateVersionAndSize">Versão %1$s • %2$s</string>
     <string name="AppUpdateDownloading">Baixando... %1$d%%</string>
     <string name="AppUpdateNow">Atualizar Agora</string>
@@ -1023,8 +1023,8 @@
     <string name="DeleteAll">Apagar Tudo</string>
     <string name="StopLoadingTitle">Parar de carregar?</string>
     <string name="StopLoading">Deseja cancelar o carregamento?</string>
-    <string name="UpdateTelegram">Atualize o Telegram</string>
-    <string name="UpdateAppAlert">Desculpe, seu Telegram está desatualizado e não consegue atender a este pedido. Por favor, atualize o Telegram.</string>
+    <string name="UpdateTelegram">Atualize o Gramable</string>
+    <string name="UpdateAppAlert">Desculpe, seu Gramable está desatualizado e não consegue atender a este pedido. Por favor, atualize o Gramable.</string>
     <string name="InvalidPhoneNumber">Número de telefone inválido. Por favor, verifique o número e tente de novo.</string>
     <string name="PleaseLoginPassport">Por favor, entre com sua conta do Telegram para usar o Telegram Passport.</string>
     <string name="BannedPhoneNumber">Este número de telefone está banido.</string>
@@ -1192,7 +1192,7 @@
     <string name="PermissionDrawAboveOtherAppsTitle">Picture-in-Picture</string>
     <string name="PermissionDrawAboveOtherAppsGroupCallTitle">Chat de vídeo flutuante</string>
     <!--Intro view-->
-    <string name="Page1Title">Telegram</string>
+    <string name="Page1Title">Gramable</string>
     <string name="Page2Title">Rápido</string>
     <string name="Page3Title">Gratuito</string>
     <string name="Page4Title">Seguro</string>

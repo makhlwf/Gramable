@@ -180,8 +180,8 @@
     <string name="NotificationGroupFew">%1$s envió %3$s al grupo %2$s</string>
     <string name="NotificationGroupAlbum">%1$s envió un álbum al grupo %2$s</string>
     <string name="NotificationGroupForwardedFew">%1$s reenvió %3$s al grupo %2$s</string>
-    <string name="NotificationHiddenName">Telegram</string>
-    <string name="NotificationHiddenChatName">Telegram</string>
+    <string name="NotificationHiddenName">Gramable</string>
+    <string name="NotificationHiddenChatName">Gramable</string>
     <string name="NotificationHiddenChatUserName">Usuario</string>
     <string name="NotificationHiddenMessage">Mensaje nuevo</string>
     <string name="Reply">Responder</string>
@@ -245,7 +245,7 @@
     <string name="NotificationActionPinnedGeoLiveUser">%1$s fijó una ubicación en tiempo real</string>
     <string name="NotificationActionPinnedGifUser">%1$s fijó un GIF</string>
     <string name="NotificationActionPinnedMusicUser">%1$s fijó un audio</string>
-    <string name="SecretChatName">Telegram</string>
+    <string name="SecretChatName">Gramable</string>
     <!--usernames-->
     <string name="Username">Nombre de usuario</string>
     <string name="UsernameAlso">también %1$s</string>
@@ -552,7 +552,7 @@
     <string name="DirectShareInfo">Chats recientes al compartir en Android</string>
     <string name="Emoji">Emojis</string>
     <string name="LargeEmoji">Emojis grandes</string>
-    <string name="TelegramVersion">Telegram para Android %1$s</string>
+    <string name="TelegramVersion">Gramable para Android %1$s</string>
     <string name="ChangeLanguageLater">Puedes cambiar el idioma más tarde en Ajustes.</string>
     <string name="ChooseYourLanguage">Elige tu idioma</string>
     <string name="ChooseYourLanguageOther">Otro</string>
@@ -662,7 +662,7 @@
     <string name="AuthAnotherClientUrl">Este código se puede utilizar para permitir que alguien inicie sesión en tu cuenta de Telegram.\n\nPara confirmar el inicio de sesión, ve a Ajustes &gt; Dispositivos &gt; Escanear QR y escanea el código.</string>
     <string name="QRCodePermissionNoCameraWithHint">**Telegram** necesita acceso a la cámara para que puedas escanear códigos QR. Toca Ajustes &gt; Permisos, y activa **Cámara**.</string>
     <string name="SetProfilePhoto">Poner foto de perfil</string>
-    <string name="AppUpdate">Actualizar Telegram</string>
+    <string name="AppUpdate">Actualizar Gramable</string>
     <string name="AppUpdateVersionAndSize">Versión %1$s • %2$s</string>
     <string name="AppUpdateDownloading">Descargando… %1$d %%</string>
     <string name="AppUpdateNow">Actualizar ahora</string>
@@ -1089,8 +1089,8 @@
     <string name="DeleteAll">Eliminar todo</string>
     <string name="StopLoadingTitle">¿Detener la carga?</string>
     <string name="StopLoading">¿Quieres detener la carga?</string>
-    <string name="UpdateTelegram">Actualiza Telegram</string>
-    <string name="UpdateAppAlert">Lo sentimos, tu app de Telegram no está actualizada y no puede procesar esta solicitud. Por favor, actualiza Telegram.</string>
+    <string name="UpdateTelegram">Actualiza Gramable</string>
+    <string name="UpdateAppAlert">Lo sentimos, tu app de Gramable no está actualizada y no puede procesar esta solicitud. Por favor, actualiza Gramable.</string>
     <string name="InvalidPhoneNumber">Número de teléfono inválido. Por favor, revisa el número y reinténtalo.</string>
     <string name="PleaseLoginPassport">Por favor, inicia sesión en tu cuenta de Telegram para usar Telegram Passport.</string>
     <string name="BannedPhoneNumber">Este número de teléfono está suspendido.</string>
@@ -1258,7 +1258,7 @@
     <string name="PermissionDrawAboveOtherAppsTitle">Modo imagen en imagen</string>
     <string name="PermissionDrawAboveOtherAppsGroupCallTitle">Superposición del videochat</string>
     <!--Intro view-->
-    <string name="Page1Title">Telegram</string>
+    <string name="Page1Title">Gramable</string>
     <string name="Page2Title">Rápido</string>
     <string name="Page3Title">Gratuito</string>
     <string name="Page4Title">Seguro</string>
