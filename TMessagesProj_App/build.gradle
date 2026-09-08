@@ -177,6 +177,9 @@ android {
         targetSdkVersion 36
         versionName APP_VERSION_NAME
         ndkVersion "27.2.12479018"
+        ndk {
+            abiFilters "arm64-v8a"
+        }
 
         multiDexEnabled true
 
@@ -186,6 +189,9 @@ android {
             cmake {
                 version '3.22.1'
                 arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-21' // , '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+                if (System.getenv("NDK_CCACHE") != null) {
+                    arguments "-DANDROID_CCACHE=${System.getenv("NDK_CCACHE")}"
+                }
                 targets 'tmessages.49'
             }
         }

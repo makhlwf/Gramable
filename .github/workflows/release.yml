@@ -252,9 +252,10 @@ jobs:
             "RELEASE_KEY_PASSWORD=$keyPass",
             "RELEASE_KEY_ALIAS=$alias",
             "RELEASE_STORE_PASSWORD=$storePass",
-            "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g",
+            "org.gradle.jvmargs=-Xmx7g -XX:MaxMetaspaceSize=1g",
             "org.gradle.daemon=false",
             "org.gradle.parallel=true",
+            "org.gradle.vfs.watch=false",
             "org.gradle.configureondemand=false",
             "android.useAndroidX=true",
             "android.enableJetifier=true",
@@ -276,6 +277,12 @@ jobs:
           [System.IO.File]::WriteAllText("local.properties", ($localLines -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
           Write-Host "Properties and secrets prepared."
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ runner.os }}-ccache-arm64
+          max-size: 2G
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -285,6 +292,7 @@ jobs:
         shell: bash
         run: |
           chmod +x gradlew
+          export NDK_CCACHE=$(which ccache)
           ./gradlew :TMessagesProj_App:assembleAfatRelease --parallel --stacktrace
 
       - name: Prepare Artifacts

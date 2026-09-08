@@ -133,10 +133,17 @@ android {
 
         multiDexEnabled true
 
+        ndk {
+            abiFilters "arm64-v8a"
+        }
+
         externalNativeBuild {
             cmake {
                 version '3.22.1'
                 arguments '-DANDROID_STL=c++_static', '-DANDROID_PLATFORM=android-21' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+                if (System.getenv("NDK_CCACHE") != null) {
+                    arguments "-DANDROID_CCACHE=${System.getenv("NDK_CCACHE")}"
+                }
                 targets 'tmessages.49'
             }
         }
